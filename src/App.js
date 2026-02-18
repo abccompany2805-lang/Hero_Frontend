@@ -388,7 +388,7 @@ import Footer from "./components/Footer";
 import PartMaster from "./components/Master/PartMaster";
 import StageMaster from "./components/Master/StageMaster";
 import ModelMaster from "./components/Master/ModelMaster";
-import PartScanningMaster from "./components/Master/PartScanningMaster";
+
 import DCTool from "./components/Master/DcToolMaster";
 import LeakTestMaster from "./components/Master/LeakTestMaster";
 import Sop from "./components/Master/sop";
@@ -416,19 +416,24 @@ import StageDocumentMapMaster from "./components/Master/StageDocumentMap";
 
 import LeakTest from "./components/Admin/LeakText"
 import StagePartRequirementMaster from "./components/Master/stage_part_requirement";
+import RecipeProcessMaster from "./components/Master/RecipeProcessMaster";
+import PLC_TagMaster from "./components/Master/PLC_TagMaster"
+import RecipePartScan from "./components/Master/RecipePartScan"
+import Login from "./components/Auth/Login";
+import RouteMaster from "./components/Master/RouteMaster";
+
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
 
   // 👇 Pages that should be FULL SCREEN (NO Navbar & Footer)
-  const hideLayoutRoutes = [
-    "/dctool-monitoring",
-    "/part-scanning-monitoring",
-    "/leaktest-monitoring"
-  ];
+const hideLayout =
+  location.pathname.startsWith("/dctool-monitoring/") ||
+  location.pathname.startsWith("/part-scanning-monitoring/") ||
+  location.pathname.startsWith("/leaktest-monitoring/") ||
+  location.pathname === "/login";
 
-  const hideLayout = hideLayoutRoutes.includes(location.pathname);
 
   return (
     <>
@@ -455,15 +460,17 @@ function App() {
           style={{ background: "#F5F7FA" }}
         >
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard/>} />
+            <Route path="/login" element={<Login/>}/>
 
-            <Route path="/part-scanning-monitoring" element={<PartScanningMonitoring />} />
-            <Route path="/dctool-monitoring" element={<DCToolMonitoring />} />
-            <Route path="/leaktest-monitoring" element={<LeakTest />} />
+            <Route path="/part-scanning-monitoring/:stageNo" element={<PartScanningMonitoring />} />
+<Route path="/dctool-monitoring/:stageNo" element={<DCToolMonitoring />} />
+<Route path="/leaktest-monitoring/:stageNo" element={<LeakTest />} />
+
 
             <Route path="/stage-master" element={<StageMaster />} />
             <Route path="/model-master" element={<ModelMaster />} />
-            <Route path="/part-scanning-master" element={<PartScanningMaster />} />
+            <Route path="/recipe-partscan-master" element={<RecipePartScan/>} />
             <Route path="/dc-tool" element={<DCTool />} />
             <Route path="/sop" element={<Sop />} />
             <Route path="/leak-test-master" element={<LeakTestMaster />} />
@@ -487,6 +494,9 @@ function App() {
             <Route path="/document-version-master" element={<DocumentVersionMaster />} />
             <Route path="/stage-doc-map" element={<StageDocumentMapMaster />} />
             <Route path ="/stage-part-requirement" element = {<StagePartRequirementMaster />} />
+            <Route path = "/recipe-process-master" element = {<RecipeProcessMaster/>}/>
+            <Route path = "/plc-tag-master" element = {<PLC_TagMaster/>} />
+            <Route path = "/route-master" element = {<RouteMaster />} />
           </Routes>
         </main>
       </div>

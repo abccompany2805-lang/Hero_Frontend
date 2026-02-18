@@ -1,9 +1,17 @@
 import React, { useState, useRef, useEffect } from "react";
 import API_BASE_URL from "../../config";
+import { useParams } from "react-router-dom";
+
 
 const STORAGE_KEY = "skd_part_scan_qty";
 
+
+
 const SKDPartScanning = () => {
+
+  const { stageNo } = useParams();
+const stageNumber = Number(stageNo);
+
   const [vin, setVin] = useState("");
   const [routeData, setRouteData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -18,6 +26,12 @@ const [prePitchReceived, setPrePitchReceived] = useState(false);
 const [isInterlocked, setIsInterlocked] = useState(false);
 
 const [prePitchValue, setPrePitchValue] = useState(null); // 0 or 1
+/* ================= RESULT STATE ================= */
+const [finalResult, setFinalResult] = useState(null); // null | PASS | FAIL
+
+
+const isInvalidStage = !stageNumber || isNaN(stageNumber);
+const [mqttSignals, setMqttSignals] = useState([]);
 
 
 
@@ -38,34 +52,64 @@ const [prePitchValue, setPrePitchValue] = useState(null); // 0 or 1
   }, [scanQtyMap]);
 
 
-/* ================= MQTT VIN VIA API (POLLING) ================= */
+/* ================= MQTT VIN VIA API (POLLING) -DONE ================= */
+
 useEffect(() => {
+  if (!stageNumber) return;
+
+  const fetchMqttSignals = async () => {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/mqtt-signal/by-stage-no/${stageNumber}`
+      );
+
+      const json = await res.json();
+
+      if (json.success && json.signals) {
+        setMqttSignals(json.signals);
+        console.log("Loaded MQTT Signals:", json.signals);
+      }
+    } catch (err) {
+      console.error("MQTT Signal Fetch Error:", err);
+    }
+  };
+
+  fetchMqttSignals();
+}, [stageNumber]);
+const vinSignal = mqttSignals.find(
+  s => s.payload_format === "RAW"
+);
+
+
+const partScanSignal = mqttSignals.find(
+  s => s.logical_name.toLowerCase().includes("part")
+);
+
+useEffect(() => {
+  if (!vinSignal?.topic) return;
+
   const interval = setInterval(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/mqtt/listen`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: "stage_10" }),
+        body: JSON.stringify({ topic: vinSignal.topic }),
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) return;
 
       const json = await res.json();
 
-    if (json.success && json.data) {
-  handleNewVin(json.data);
-}
+      if (json.success && json.data) {
+        handleNewVin(json.data);
+      }
     } catch (err) {
-      console.error("MQTT API polling error:", err.message);
+      console.error("MQTT VIN polling error:", err.message);
     }
   }, 1000);
 
   return () => clearInterval(interval);
-}, [lastMqttVin]);
-
-
+}, [vinSignal?.topic]);
 
 useEffect(() => {
   const interval = setInterval(async () => {
@@ -73,7 +117,7 @@ useEffect(() => {
       const res = await fetch(`${API_BASE_URL}/api/mqtt/listen`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: "stage_10_prepitch" }),
+        body: JSON.stringify({ topic: "stage_20_prepitch" }),
       });
 
       if (!res.ok) return;
@@ -84,10 +128,12 @@ useEffect(() => {
       const prepitch = Number(json.data); // 0 or 1
       setPrePitchValue(prepitch);
 
-      const parts = routeData.stages?.[0]?.parts || [];
-      const allScanned = parts.every(
-        (p) => (scanQtyMap[p.part_number] || 0) >= p.quantity_required
-      );
+const parts = routeData?.partRequirements || [];
+
+const allScanned = parts.every(
+  (p) => (scanQtyMap[p.part_no] || 0) >= p.qty_required
+);
+
 
       /* =================================================
          AUTHORITATIVE DECISION TABLE
@@ -125,48 +171,18 @@ useEffect(() => {
 
 
 
-// useEffect(() => {
-//   if (!prePitchReceived || !routeData) return;
-
-//   const parts = routeData?.stages?.[0]?.parts || [];
-
-//   const allScanned = parts.every(
-//     (p) => (scanQtyMap[p.part_number] || 0) >= p.quantity_required
-//   );
-
-//   if (!allScanned) {
-//     setIsInterlocked(true);
-//   }
-// }, [prePitchReceived, scanQtyMap, routeData]);
-
-
-// const handleNewVin = (newVin) => {
-//   if (!newVin || newVin === lastMqttVin) return;
-
-//   console.log("VIN CHANGED → RESETTING STATE:", newVin);
-
-//   setLastMqttVin(newVin);
-//   setVin(newVin);
-
-//   // 🔴 RESET ALL VIN-DEPENDENT STATE
-//   setRouteData(null);
-//   setScanQtyMap({});
-//   setLastScanText("");
-//   setLastScannedSku(null);
-//   setWrongSku(false);
-//   localStorage.removeItem(STORAGE_KEY);
-
-//   // 🔵 FETCH ROUTE DATA
-//   fetchVinDataFromApi(newVin);
-// };
-
 const handleNewVin = (newVin) => {
-  if (!newVin || newVin === lastMqttVin) return;
+  if (!newVin) return;
 
-  console.log("VIN CHANGED → RESETTING STATE:", newVin);
+  const trimmedVin = newVin.trim();
 
-  setLastMqttVin(newVin);
-  setVin(newVin);
+  // 🔴 DO NOTHING if VIN is same
+  if (trimmedVin === lastMqttVin) return;
+
+  console.log("VIN CHANGED → RESETTING STATE:", trimmedVin);
+
+  setLastMqttVin(trimmedVin);
+  setVin(trimmedVin);
 
   // 🔴 RESET VIN STATE
   setRouteData(null);
@@ -177,27 +193,32 @@ const handleNewVin = (newVin) => {
   setPrePitchReceived(false);
   setPrePitchValue(null);
   setIsInterlocked(false);
+  setFinalResult(null);
 
   localStorage.removeItem(STORAGE_KEY);
 
-  fetchVinDataFromApi(newVin);
+  // 🔥 CALL API ONLY ON NEW VIN
+  fetchVinDataFromApi(trimmedVin);
 };
 
 
+
 const publishStageStatus = async (value) => {
+  if (!partScanSignal?.topic) return;
+
   try {
     await fetch(`${API_BASE_URL}/api/mqtt/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        topic: "part_stage10_status",
-        data: String(value), // "0" or "1"
+        topic: partScanSignal.topic,
+        data: String(value),
       }),
     });
 
-    console.log("✅ Published part_stage10_status:", value);
+    console.log("Published:", value);
   } catch (err) {
-    console.error("❌ MQTT publish error", err);
+    console.error("MQTT publish error", err);
   }
 };
 
@@ -207,17 +228,25 @@ const fetchVinDataFromApi = async (incomingVin) => {
     setLoading(true);
 
     const res = await fetch(
-      `${API_BASE_URL}/api/vin/get-full-route-with-parts-by-vin`,
+      `${API_BASE_URL}/api/vin/get-model-by-vin`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vin_number: incomingVin }),
+        body: JSON.stringify({
+          vin_no: incomingVin,       // 🔥 FIXED FIELD NAME
+         stage_no: stageNumber              // 🔥 REQUIRED PARAM
+        }),
       }
     );
 
     const json = await res.json();
-    if (json.success) {
-      setRouteData(json.data);
+    console.log("VIN API RESPONSE:", json);
+
+    if (json?.model) {
+      setRouteData(json);
+    } else {
+      console.error("Invalid VIN response structure");
+      setRouteData(null);
     }
   } catch (err) {
     console.error("VIN API error", err);
@@ -227,6 +256,8 @@ const fetchVinDataFromApi = async (incomingVin) => {
 };
 
 
+
+
   /* ================= FETCH VIN ================= */
   const fetchVinData = async () => {
     if (!vin) return;
@@ -234,11 +265,11 @@ const fetchVinDataFromApi = async (incomingVin) => {
     try {
       setLoading(true);
       const res = await fetch(
-        `${API_BASE_URL}/api/vin/get-full-route-with-parts-by-vin`,
+        `${API_BASE_URL}/api/vin/get-model-by-vin`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ vin_number: vin }),
+          body: JSON.stringify({ vin_no: vin }),
         }
       );
 
@@ -257,12 +288,17 @@ const fetchVinDataFromApi = async (incomingVin) => {
 
 
   /* ================= PARTS ================= */
-  const parts =
-    routeData?.stages?.[0]?.parts?.map((p) => ({
-      sku: p.part_number,
-      name: p.part_name,
-      qty: p.quantity_required,
-    })) || [];
+const parts =
+  routeData?.partRequirements?.map((p) => ({
+    sku: p.part_no,
+    name: p.part_name,
+    qty: p.qty_required,
+    regex: p.regex_pattern,
+    minLen: p.min_len,
+    maxLen: p.max_len,
+    allowDuplicate: p.allow_duplicate,
+  })) || [];
+
 
   const chunkData = (data, size) => {
     const chunks = [];
@@ -274,12 +310,15 @@ const fetchVinDataFromApi = async (incomingVin) => {
 
   /* ================= SCAN LOGIC ================= */
 const handleScan = () => {
-  if (!scannedValue) return;
+  if (!scannedValue || isInterlocked) return;
 
   const scannedSku = scannedValue.trim();
-  setLastScanText(scannedSku); // ✅ NEW — always show last scanned text
+  setLastScanText(scannedSku);
 
-  const part = parts.find((p) => p.sku === scannedSku);
+  const part = parts.find((p) => {
+    if (!p.regex) return false;
+    return new RegExp(p.regex).test(scannedSku);
+  });
 
   if (!part) {
     setWrongSku(true);
@@ -287,21 +326,17 @@ const handleScan = () => {
     return;
   }
 
-  if (!scannedValue || isInterlocked) return;
-
-
   setWrongSku(false);
-  setLastScannedSku(scannedSku);
+  setLastScannedSku(part.sku);
 
   setScanQtyMap((prev) => {
-    const current = prev[scannedSku] || 0;
+    const current = prev[part.sku] || 0;
     if (current >= part.qty) return prev;
-    return { ...prev, [scannedSku]: current + 1 };
+    return { ...prev, [part.sku]: current + 1 };
   });
 
-  setScannedValue(""); // clear input
+  setScannedValue("");
 };
-
 
   /* ================= ROW STYLE ================= */
   const getRowStyle = (row) => {
@@ -328,552 +363,451 @@ const handleScan = () => {
     };
   };
 
-  return (
-    <div style={s.root}>
-      {/* ================= HEADER ================= */}
-     <div style={s.headerRow}>
-  {/* LEFT LOGO */}
-  <img
-    src="/hero-logo.png"
-    alt="Hero"
-    style={{
-      height: 53,
-      position: "absolute",
-      left: 20,
-    }}
-  />
-
-  {/* CENTER TITLE */}
-  <div style={s.headerTitle}>SKD Part Scanning</div>
-
-  {/* RIGHT LOGO */}
-  <img
-    src="/operatex-logo.jpg"
-    alt="OperateX"
-    style={{
-      height: 53,
-      position: "absolute",
-      right: 20,
-    }}
-  />
-</div>
-
-
-      {/* ================= MODE ROW ================= */}
-      <div style={s.modeRow}>
-        <div style={s.modeGroup}>
-          <div style={s.modeOption}>
-            <span style={s.radioSelected}></span>
-            <span style={s.modeText}>Auto Mode</span>
-          </div>
-          <div style={s.modeOption}>
-            <span style={s.radioUnselected}></span>
-            <span style={s.modeText}>Manual Mode</span>
-          </div>
-        </div>
+return (
+  <>
+   {isInvalidStage ? (
+      <div style={{ background: "black", color: "white", padding: 40 }}>
+        Invalid Stage Number
       </div>
-
-      {/* ================= STATUS ================= */}
-      <div style={s.statusRow}>
-        <span style={{ color: "#00aaff" }}>
-         LINE STATUS -{" "}
-<span style={{ color: isInterlocked ? "red" : "#00ff00" }}>
-  {isInterlocked ? "INTERLOCK" : "OK"}
-</span>
-
-        </span>
-
-        <span style={{ color: "#00ff00", fontWeight: "bold" }}>
-          SKU: {routeData?.model_sku_code || "---"}
-        </span>
-
-        <span style={{ color: "#00ff00", fontWeight: "bold" }}>
-          MQTT Connected
-        </span>
-      </div>
-
-      {/* ================= MAIN ================= */}
-      <div
-  style={{
-    ...s.mainBox,
-    border: isInterlocked ? "3px solid red" : s.mainBox.border,
-  }}
->
-
-        <div style={s.row1}>
-          <div style={s.model}>
-            Model:- <span>{routeData?.model_sku_name || "---"}</span>
-          </div>
-
-          <input
-  style={{
-    ...s.vinSingle,
-    background: isInterlocked ? "#ff4d4d" : s.vinSingle.background,
-  }}
-
-            value={vin}
-            placeholder="Enter VIN"
-            onChange={(e) => setVin(e.target.value)}
-            onKeyDown={(e) => {
-  if (e.key === "Enter") {
-    handleNewVin(vin.trim());
-  }
-}}
-
-          />
-
-          <div style={s.dateTimeBox}>
-            <div style={s.dateTimeTag}>DATE</div>
-            <div style={s.dateTimeValue}>
-              {new Date().toLocaleDateString()}
-            </div>
-          </div>
-        </div>
-
-        <div style={s.row2}>
-          <div style={s.stageSideRow}>
-            <div style={s.stageItem}>
-              <span style={s.stageLabel}>Stage</span>
-             <div
-  style={{
-    ...s.circle,
-    border: isInterlocked ? "3px solid red" : s.circle.border,
-  }}
->
-
-                {routeData?.stages?.[0]?.stage_no || "--"}
-              </div>
-            </div>
-          </div>
-
-          <div style={s.scanBlock}>
-           
-
-           <input
-  ref={scanInputRef}
-  disabled={isInterlocked}
-  style={{
-    ...s.scanInput,
-    border: isInterlocked
-      ? "3px solid red"
-      : wrongSku
-      ? "3px solid red"
-      : s.scanInput.border,
-    background: isInterlocked ? "#ffe6e6" : s.scanInput.background,
-  }}
-  value={scannedValue}
-
-              placeholder="Waiting for scan..."
-              onChange={(e) => setScannedValue(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleScan()}
-            />
-            <div style={s.scanLabel}>
-  {loading ? "Fetching VIN..." : "Scanned Data:-"}
-
-  {lastScanText && (
-    <span style={{ marginLeft: 12, fontWeight: "bold", color: "#00ff00" }}>
-      {lastScanText}
-    </span>
-  )}
-
-  {wrongSku && (
-    <span style={{ color: "red", marginLeft: 12, fontWeight: "bold" }}>
-      WRONG SKU
-    </span>
-  )}
-</div>
-
-          </div>
-
-          <div style={s.dateTimeBox}>
-            <div style={s.dateTimeTag}>TIME</div>
-            <div style={s.dateTimeValue}>
-              {new Date().toLocaleTimeString()}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ================= PASS TABLE ================= */}
-<div style={s.passWrapper}>
-  <div
-    style={{
-      ...s.passLabel,
-      color: isInterlocked ? "red" : s.passLabel.color,
-      border: isInterlocked ? "4px solid red" : s.passLabel.border,
-    }}
-  >
-    {isInterlocked ? (
-      <>
-        <span>F</span>
-        <span>A</span>
-        <span>I</span>
-        <span>L</span>
-      </>
     ) : (
-      <>
-        <span>P</span>
-        <span>A</span>
-        <span>S</span>
-        <span>S</span>
-      </>
-    )}
+<div style={ui.root}>
+
+  {/* HEADER */}
+  <div style={ui.header}>
+    <img src="/hero-logo.png" style={ui.logoLeft} />
+    <div style={ui.title}>SKD Part Scanning</div>
+    
+    <img src="/operatex-logo.jpg" style={ui.logoRight} />
   </div>
 
-  <div style={s.tableArea}>
-    {chunkData(
-      [...parts].sort((a, b) => {
-        if (a.sku === lastScannedSku) return -1;
-        if (b.sku === lastScannedSku) return 1;
-        return 0;
-      }),
-      6
-    ).map((chunk, idx) => (
-      <table key={idx} style={s.passTable}>
+  {/* MODEL + MQTT */}
+  <div style={ui.topRow}>
+    <div style={ui.modelText}>
+      Model: {routeData?.model?.model_name || "-"}
+    </div>
+
+    <div style={ui.skuText}>
+        SKU : {routeData?.model?.model_code || "-"}
+      </div>
+
+    {/* <div style={ui.mqttText}>
+      MQTT Connected
+    </div> */}
+  </div>
+
+  {/* LINE STATUS + MODE */}
+  <div style={ui.statusRow}>
+    <div>
+      LINE STATUS :
+      <span style={{ color: isInterlocked ? "#00ff00" : "#00ff00" }}>
+        {isInterlocked ? " INTERLOCKED" : " OK"}
+      </span>
+    </div>
+
+    <div>
+      <span style={{ color: "#00ff00" }}>AUTO</span>
+      <span style={{ color: "#ffd700", marginLeft: 20 }}>MANUAL</span>
+    </div>
+  </div>
+
+  {/* MAIN SECTION */}
+ <div style={ui.mainSection}>
+
+  {/* LEFT BOX */}
+<div style={ui.leftBox}>
+
+  {/* Stage Row */}
+  <div style={ui.stageRow}>
+    <div style={ui.stageCircleOuter}>
+      <div style={ui.stageCircleInner}>
+        {/* {routeData?.routeStep?.stage_no || "-"} */}
+        {stageNumber}
+      </div>
+    </div>
+
+    <div style={ui.stageNameBox}>
+      <div style={ui.stageTitle}>Stage</div>
+      <div style={ui.stageName}>
+        {routeData?.routeStep?.stage_name || "Part Scannning"}
+      </div>
+    </div>
+  </div>
+<div>
+
+   {/* Date */}
+  <div style={ui.dateTimeRow}>
+    <div style={ui.dateTag}>DATE</div>
+    <div style={ui.dateValue}>
+      {new Date().toLocaleDateString()}
+    </div>
+  </div>
+
+  {/* Time */}
+  <div style={ui.dateTimeRow}>
+    <div style={ui.dateTag}>TIME</div>
+    <div style={ui.dateValue}>
+      {new Date().toLocaleTimeString()}
+    </div>
+  </div>
+</div>
+ 
+
+</div>
+
+
+  {/* CENTER DIVIDER PANEL */}
+  <div style={ui.centerPanel}>
+    <div style={ui.countBoxTop}>
+      <div style={ui.countValue}>
+        {Object.values(scanQtyMap).reduce((a,b)=>a+b,0)}
+      </div>
+      <div style={ui.countLabel}>SCAN COMPLETE</div>
+      
+    </div>
+
+    <div style={ui.centerDividerLine}></div>
+
+    <div style={ui.countBoxBottom}>
+      <div style={ui.countValue}>
+        {parts.reduce((sum,p)=>sum+p.qty,0) -
+         Object.values(scanQtyMap).reduce((a,b)=>a+b,0)}
+      </div>
+      <div style={ui.countLabel}>SCAN QUANTITY</div>
+      
+    </div>
+  </div>
+
+  {/* RIGHT BOX */}
+  <div style={ui.rightBox}>
+    <div style={ui.vinDisplay}>
+      {vin || "-"}
+    </div>
+
+    <div style={ui.scanLabel}>Scanned Data</div>
+
+    <input
+      ref={scanInputRef}
+      value={scannedValue}
+      onChange={(e)=>setScannedValue(e.target.value)}
+      onKeyDown={(e)=>e.key==="Enter" && handleScan()}
+      style={ui.scanInput}
+    />
+
+    <div style={ui.resultBox}>
+      {finalResult || "-"}
+    </div>
+
+    {/* PART TABLE */}
+    <div style={ui.tableContainer}>
+      <table style={ui.table}>
         <thead>
           <tr>
-            <th style={s.passTh}>Part SKU</th>
-            <th style={s.passTh}>Part Name</th>
-            <th style={s.passTh}>Qty</th>
-            <th style={s.passTh}>Scanned</th>
+            <th>SKU</th>
+            <th>NAME</th>
+            <th>REQ</th>
+            <th>SCAN</th>
           </tr>
         </thead>
         <tbody>
-          {chunk.map((row, i) => (
-            <tr key={i} style={getRowStyle(row)}>
-              <td style={s.passTd}>{row.sku}</td>
-              <td style={s.passTd}>{row.name}</td>
-              <td style={s.passTd}>{row.qty}</td>
-              <td style={s.passTd}>{scanQtyMap[row.sku] || 0}</td>
+          {parts.map((row,i)=>(
+            <tr key={i}>
+              <td>{row.sku}</td>
+              <td>{row.name}</td>
+              <td>{row.qty}</td>
+              <td>{scanQtyMap[row.sku] || 0}</td>
             </tr>
           ))}
         </tbody>
       </table>
-    ))}
+    </div>
   </div>
+
 </div>
 
-    </div>
-  );
+
+  {/* FOOTER */}
+  <div style={ui.footer}>
+    Powered by Opertex Thetavega
+  </div>
+
+</div>
+  )}
+</>
+);
+
 };
 
 export default SKDPartScanning;
 
+const ui = {
 
+root:{
+  background:"#000",
+  color:"#fff",
+  height:"100vh",
+  display:"flex",
+  flexDirection:"column",
+  fontFamily:"Segoe UI",
 
-/* ================= STYLES ================= */
-
-const green = "#00ff00";
-
-
-
-const s = {
- root: {
-  width: "100vw",
-  height: "100vh",
-  background: "#000",
-  color: green,
-  fontFamily: "Montserrat, Segoe UI, Arial",
-  overflow: "hidden",
-  paddingBottom: "30px",   // ✅ small bottom space
-
-
+  borderLeft:"6px solid #00cfff",
+  borderTop:"6px solid #00cfff",
+  borderRight:"6px solid #00cfff",
+  borderBottom:"none"   // ❌ no bottom border
 },
 
-  /* ================= HEADER ================= */
-  headerRow: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingBottom: 10,
-  },
 
-  headerTitle: {
-    background: "#00b7ff",
-    color: "#000",
-    fontSize: 34,
-    fontWeight: "bold",
-    padding: "14px 90px",
-    borderRadius: "0px 0px 30px 30px",
-    lineHeight: 1,
-  },
+header:{
+  display:"flex",
+  alignItems:"center",
+  justifyContent:"center",
+  background:"#ffffff",   // ✅ white instead of grey
+  color:"#000",
+  height:60,
+  position:"relative",
+  borderRadius:"0px 0px 20px 20px"
+},
 
-  /* ================= MODE ROW ================= */
-  modeRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 24,
-    padding: "6px 16px",
-    fontSize: 18,
-  },
+titletop:{
+  position:"absolute",
+  top:0,
+  left:"50%",
+  transform:"translateX(-50%)",
+  height:60,
+  display:"flex",
+  alignItems:"center",
+  justifyContent:"center",
+},
 
-  modeGroup: {
-    display: "flex",
-    gap: 68,
-    padding: "6px 16px",
-    border: "2px solid #ffffff",
-  },
+title:{
+  fontSize:35,
+  fontWeight:"bold",
+  padding:"2px 60px",
+  borderRadius:"0px 0px 30px 30px",
+  color:"#000",
+  letterSpacing:2
+},
 
-  modeOption: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
+logoLeft:{position:"absolute",left:15,height:60},
+logoRight:{position:"absolute",right:15,height:60},
 
-  modeVINOption: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    marginRight: 54,
-  },
+topRow:{
+  display:"flex",
+  justifyContent:"space-around",
+  padding:"4px 20px",
+  fontSize:25,
+  fontWeight: "Bold",
+  letterSpacing:1
+},
 
-  modeText: {
-    color: "#ffd700",
-    fontSize: 18,
-    whiteSpace: "nowrap",
-  },
+modelText:{color:"#ffd700"},
+mqttText:{color:"#00ff00"},
 
-  modeTextWhite: {
-    color: "#ffffff",
-    fontSize: 18,
-    whiteSpace: "nowrap",
-  },
+statusRow:{
+  borderTop: "2px solid grey",
+    borderBottom: "2px solid grey",
 
-  radioSelected: {
-    width: 14,
-    height: 14,
-    borderRadius: "50%",
-    background: "#ffffff",
-    border: "2px solid #ffffff",
-  },
-
-  radioUnselected: {
-    width: 14,
-    height: 14,
-    borderRadius: "50%",
-    background: "transparent",
-    border: "2px solid #ffffff",
-  },
-
-  checkboxEmpty: {
-    width: 16,
-    height: 16,
-    border: "2px solid #ffffff",
-  },
-
-  checkboxChecked: {
-    width: 16,
-    height: 16,
-    border: "2px solid #ffffff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#ffffff",
-  },
-
-  /* ================= STATUS ================= */
-  statusRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "8px 20px",
-    fontSize: 28,
-    width: "100%",
-  },
-
-  /* ================= MAIN BOX ================= */
-  mainBox: {
-    border: `3px solid ${green}`,
-    borderRadius: 14,
-    padding: 14,
-    margin: "8px",
-
-    boxSizing: "border-box",
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-
-  row1: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  row2: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    minHeight: 100,
-  },
-
-  /* ================= STAGE / SIDE ================= */
-  stageSideRow: {
-    display: "flex",
-    gap: 30,
-    alignItems: "center",
-  },
-
-  stageItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  stageLabel: {
-    fontSize: 28,
-    fontWeight: "bold",
-  },
-
-  circle: {
-    width: 80,
-    height: 80,
-    borderRadius: "50%",
-    border: `3px solid ${green}`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 22,
-    fontWeight: "bold",
-    marginTop: 4,
-  },
-
-  /* ================= MODEL ================= */
-  model: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-
-  /* ================= VIN ================= */
-  vinSingle: {
-    width: "420px",
-    display: "flex",
-    justifyContent: "center",
-    background: "#2ecc40",
-    color: "#000",
-    fontWeight: "bold",
-    fontSize: 22,
-    padding: "8px 18px",
-    borderRadius: 10,
-  },
-
-  /* ================= DATE / TIME ================= */
-  dateTimeBox: {
-    width: 280,
-    display: "flex",
-    gap: 10,
-    color: "#fcf9f9",
-    fontWeight: "bold",
-    borderRadius: 10,
-    padding: "8px 14px",
-    textAlign: "center",
-  },
-
-  dateTimeTag: {
-    fontSize: 22,
-    background: "#2ecc40",
-    padding: "8px 12px",
-    borderRadius: 8,
-  },
-
-  dateTimeValue: {
-    fontSize: 22,
-    marginTop: 2,
-  },
-
-  /* ================= SCAN ================= */
-  scanBlock: {
-    width: "34%",
-  },
-
-  scanInput: {
-  height: 42,
-  width: "100%",
-  background: "#ffffff",
-  borderRadius: 4,
-  border: "2px solid #00ff00",
-  fontSize: 20,
+  display:"flex",
+  justifyContent:"space-between",
+  padding:"4px 20px",
+  fontSize:28,
   fontWeight: "bold",
-  padding: "4px 10px",
-  outline: "none",
+  letterSpacing:1
+},
+
+mainSection:{
+  display:"flex",
+  flex:1,
+  padding:"10px 10px 90px 10px",
+  alignItems:"stretch",
+  gap:20
+},
+
+centerPanel:{
+  width:"auto",     // Clay orange color
+  borderRadius:10,
+  color: "#ffff",
+  display:"flex",
+  flexDirection:"column",
+  justifyContent:"space-between",
+  alignItems:"center",
+  padding:"60px 0px"
+},
+
+countBoxTop:{
+  textAlign:"center",
+  display: "flex",
+  flexDirection :"column",
+  gap: 40
+},
+
+countBoxBottom:{
+  textAlign:"center",
+  display: "flex",
+  flexDirection :"column",
+  gap: 40
+},
+
+countLabel:{
+  fontSize:22,
+  fontWeight:"bold",
+  color:"#fcfcf6",
+  marginBottom:10
+},
+
+countValue:{
+  fontSize:40,
+  fontWeight:"bold",
+  color:"#f5f101"
+},
+
+centerDividerLine:{
+  width:"80%",
+  height:8,
+  background:"#e97f06",
+ 
+},
+leftBox:{
+  width:"30%",
+  border:"4px solid #d000ff",
+  borderRadius:16,
+  padding:20,
+  display:"flex",
+  flexDirection:"column",
+  justifyContent: "space-between"
+},
+
+/* Stage Layout */
+stageRow:{
+  display:"flex",
+  alignItems:"center",
+  gap:20
+},
+
+stageCircleOuter:{
+  width:150,
+  height:150,
+  borderRadius:"50%",
+  border:"4px solid #d000ff",
+  display:"flex",
+  alignItems:"center",
+  justifyContent:"center"
+},
+
+stageCircleInner:{
+  width:120,
+  height:120,
+  borderRadius:"50%",
+  border:"4px solid #00ff00",
+  display:"flex",
+  alignItems:"center",
+  justifyContent:"center",
+  fontSize:32,
+  fontWeight:"bold",
+  color:"#ffd700"
+},
+
+stageNameBox:{
+  display:"flex",
+  flexDirection:"column",
+  justifyContent:"center"
+},
+
+stageTitle:{
+  fontSize:22,
+  color:"#ffffff",
+  marginBottom:8
+},
+
+stageName:{
+  fontSize:26,
+  fontWeight:"bold",
+  color:"#ffffff"
+},
+
+/* Date & Time EXACT Image Style */
+dateTimeRow:{
+  display:"flex",
+  alignItems:"center",
+  gap:15,
+  marginTop:0
+  
+},
+
+dateTag:{
+  background:"#e5e5e5",
+  color:"#000",
+  padding:"6px 12px",
+  borderRadius:6,
+  fontSize:14,
+  fontWeight:"bold",
+  minWidth:70,
+  textAlign:"center"
+},
+
+dateValue:{
+  fontSize:22,
+  fontWeight:"bold",
+  color:"#ffffff"
 },
 
 
-  scanLabel: {
-    color: "#ffd700",
-    marginBottom: 6,
-    fontSize: 28,
-  },
+rightBox:{
+  flex:1,
+  border:"4px solid #00cfff",
+  borderRadius:12,
+  padding:20,
+  display:"flex",
+  flexDirection:"column",
+  gap:15
+},
 
-  scanBox: {
-    height: 42,
-    background: "#ffffff",
-    borderRadius: 2,
-  },
+vinDisplay:{
+  background:"#ccc",
+  color:"#000",
+  padding:10,
+  borderRadius:10,
+  fontSize:22,
+  fontWeight:"bold"
+},
 
-  /* ================= PASS TABLE ================= */
-  passWrapper: {
-    display: "flex",
-    background: "#000",
-    border: "4px solid #1aff1a",
-    borderRadius: 16,
-    padding: 10,
-    height: "48%",
-    width: "100%",
-    gap: 10,
-    boxSizing: "border-box",
-  },
+skuText:{fontSize:25, letterSpacing: 2},
 
-  passLabel: {
-    width: 80,
-    background: "#001a00",
-    border: "4px solid #1aff1a",
-    borderRadius: 14,
-    color: "#1aff1a",
-    fontWeight: "bold",
-    fontSize: 40,
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    letterSpacing: 3,
-  },
+scanLabel:{color:"#ffd700"},
 
-  tableArea: {
-    display: "flex",
-    flex: 1,
-    gap: 6,
-    overflow: "hidden",
-  },
+scanInput:{
+  height:45,
+  fontSize:20,
+  padding:10
+},
 
-  passTable: {
-    flex: 1,
-    borderCollapse: "collapse",
-    tableLayout: "fixed",
-    background: "#008000",
-    color: "#fff",
-    fontSize: 20,
-    height: "100%",
-  },
+resultBox:{
+  height:80,
+  border:"4px solid #00ff00",
+  borderRadius:15,
+  display:"flex",
+  alignItems:"center",
+  justifyContent:"center",
+  fontSize:40,
+  fontWeight:"bold",
+  color:"#ff0033"
+},
 
-  passTh: {
-    background: "#d9d9d9",
-    color: "#000",
-    fontWeight: "bold",
-    border: "2px solid #ffffff",
-    padding: "4px 6px",
-    fontSize: 18,
-    textAlign: "center",
-  },
+tableContainer:{
+  flex:1,
+  overflow:"auto"
+},
 
-  passTd: {
-    border: "2px solid #ffffff",
-    padding: "6px 6px",
-    fontSize: 18,
-    textAlign: "center",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
+table:{
+  width:"100%",
+  borderCollapse:"collapse"
+},
+
+footer:{
+  background:"#ff8c00",
+  color:"#000",
+  textAlign:"center",
+  padding:4,
+  fontWeight:"bold"
+}
+
 };

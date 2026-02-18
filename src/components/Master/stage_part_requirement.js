@@ -1,108 +1,162 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Pencil, Trash2, Plus } from "lucide-react";
 import axios from "axios";
-import { Pencil, Trash2, Plus, RotateCcw, Eye } from "lucide-react";
 import API_BASE_URL from "../../config";
-
-const API = `${API_BASE_URL}/api/stagepartrequirementmaster`;
 
 const emptyForm = {
   route_step_id: "",
   part_id: "",
-  quantity_required: 1,
-  scan_policy: "",
+  qty_required: 1,
+  scan_policy: "EACH_PART",
   mandatory: true,
 };
 
-const StagePartRequirementMaster = () => {
-  const [rows, setRows] = useState([]);
+/* ================= API ================= */
 
-  const [filters, setFilters] = useState({
-    route_step_id: "",
-    part_id: "",
-  });
+const fetchRequirements = async () => {
+  const { data } = await axios.get(
+    `${API_BASE_URL}/api/route-part-requirements`
+  );
+  return data;
+};
+
+const fetchRouteSteps = async () => {
+  const { data } = await axios.get(
+    `${API_BASE_URL}/api/route-steps`
+  );
+  return data;
+};
+
+const fetchParts = async () => {
+  const { data } = await axios.get(`${API_BASE_URL}/api/parts`);
+  return data;
+};
+
+const RoutePartRequirementMaster = () => {
+  const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState(emptyForm);
   const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [showView, setShowView] = useState(false);
-  const [viewData, setViewData] = useState(null);
-  
 
-  /* ================= LOAD ================= */
-  useEffect(() => {
-    fetchData();
-  }, []);
+  /* ================= FETCH ================= */
 
-  const fetchData = async () => {
-    const res = await axios.get(API);
-    setRows(res.data);
+  const { data: requirements = [], isLoading } = useQuery({
+    queryKey: ["routePartRequirements"],
+    queryFn: fetchRequirements,
+  });
+
+  const { data: routeSteps = [] } = useQuery({
+    queryKey: ["routeSteps"],
+    queryFn: fetchRouteSteps,
+  });
+
+  const { data: parts = [] } = useQuery({
+    queryKey: ["parts"],
+    queryFn: fetchParts,
+  });
+
+  /* ================= MUTATIONS ================= */
+
+  const createMutation = useMutation({
+    mutationFn: (newData) =>
+      axios.post(
+        `${API_BASE_URL}/api/route-part-requirements`,
+        newData
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["routePartRequirements"]);
+      setShowModal(false);
+    },
+    onError: (err) => {
+      alert(err.response?.data?.message || "Insert failed");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (updatedData) =>
+      axios.put(
+        `${API_BASE_URL}/api/route-part-requirements/${updatedData.req_id}`,
+        updatedData
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["routePartRequirements"]);
+      setShowModal(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) =>
+      axios.delete(
+        `${API_BASE_URL}/api/route-part-requirements/${id}`
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries(["routePartRequirements"]),
+  });
+
+  /* ================= HELPERS ================= */
+
+  const getPartName = (id) => {
+    const part = parts.find((p) => p.part_id === id);
+    return part ? `${part.part_no} - ${part.part_name}` : "-";
   };
 
-  /* ================= FILTER ================= */
-  const filteredRows = useMemo(() => {
-    return rows.filter(
-      (r) =>
-        String(r.route_step_id)
-          .includes(filters.route_step_id) &&
-        String(r.part_id).includes(filters.part_id)
-    );
-  }, [rows, filters]);
+  const getRouteStepName = (id) => {
+    const step = routeSteps.find((r) => r.route_step_id === id);
+    if (!step) return id;
 
-  /* ================= ACTIONS ================= */
+    return `SEQ ${step.seq_no} - Stage ${step.stage_id}`;
+  };
+
+  /* ================= HANDLERS ================= */
+
   const handleAdd = () => {
-    setIsEditing(false);
     setFormData(emptyForm);
+    setIsEditing(false);
     setShowModal(true);
   };
 
   const handleEdit = (row) => {
+    setFormData(row);
     setIsEditing(true);
-    setFormData({
-      stage_part_req_id: row.stage_part_req_id,
-      route_step_id: row.route_step_id,
-      part_id: row.part_id,
-      quantity_required: row.quantity_required,
-      scan_policy: row.scan_policy || "",
-      mandatory: row.mandatory,
-    });
     setShowModal(true);
   };
 
-  const handleSave = async () => {
+  const handleDelete = (id) => {
+    if (!window.confirm("Delete this requirement?")) return;
+    deleteMutation.mutate(id);
+  };
+
+  const handleSave = () => {
     if (!formData.route_step_id || !formData.part_id) {
-      alert("Route Step ID and Part ID are required");
+      alert("Route Step and Part are required");
       return;
     }
 
+    if (Number(formData.qty_required) < 1) {
+      alert("Quantity must be >= 1");
+      return;
+    }
+
+    const payload = {
+      ...formData,
+      qty_required: Number(formData.qty_required),
+    };
+
     if (isEditing) {
-      await axios.put(
-        `${API}/${formData.stage_part_req_id}`,
-        formData
-      );
+      updateMutation.mutate(payload);
     } else {
-      await axios.post(API, formData);
+      createMutation.mutate(payload);
     }
-
-    setShowModal(false);
-    fetchData();
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this record?")) {
-      await axios.delete(`${API}/${id}`);
-      fetchData();
-    }
-  };
-
-  const handleView = (row) => {
-    setViewData(row);
-    setShowView(true);
   };
 
   /* ================= UI ================= */
+
   return (
     <div className="container-fluid py-3">
-      {/* ================= HEADER ================= */}
+
+      {/* HEADER */}
       <div
         className="card shadow-sm rounded-4 mb-2 mx-2"
         style={{
@@ -112,61 +166,28 @@ const StagePartRequirementMaster = () => {
           borderBottom: 0,
         }}
       >
-        <div className="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
-          <div>
-            <h4 className="fw-bold mb-1">Stage Part Requirement Master</h4>
-          </div>
+        <div className="card-body d-flex justify-content-between align-items-center">
+          <h4 className="fw-bold mb-1">
+            Route Part Requirement Master
+          </h4>
 
-          <div className="d-flex gap-2 flex-wrap align-items-center">
-            <input
-              className="form-control"
-              placeholder="Route Step ID"
-              style={{ width: 160 }}
-              value={filters.route_step_id}
-              onChange={(e) =>
-                setFilters({ ...filters, route_step_id: e.target.value })
-              }
-            />
-
-            <input
-              className="form-control"
-              placeholder="Part ID"
-              style={{ width: 160 }}
-              value={filters.part_id}
-              onChange={(e) =>
-                setFilters({ ...filters, part_id: e.target.value })
-              }
-            />
-
-            <button
-              className="btn btn-sm"
-              style={{ background: "#d3e7f3" }}
-              onClick={() =>
-                setFilters({ route_step_id: "", part_id: "" })
-              }
-            >
-              <RotateCcw size={14} />
-            </button>
-
-            <button
-              className="btn btn-danger btn-sm d-flex align-items-center gap-1"
-              onClick={handleAdd}
-            >
-              <Plus size={14} />
-              Add
-            </button>
-          </div>
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={handleAdd}
+          >
+            <Plus size={14} /> Add Requirement
+          </button>
         </div>
       </div>
 
-      {/* ================= TABLE ================= */}
+      {/* TABLE */}
       <div className="table-responsive card shadow-sm border-0 rounded-4 my-4 mx-2">
         <table className="table table-bordered align-middle mb-0">
-          <thead className="border-bottom">
-            <tr className="text-muted">
+          <thead>
+            <tr>
               <th>Sr</th>
-              <th>Route Step ID</th>
-              <th>Part ID</th>
+              <th>Route Step</th>
+              <th>Part</th>
               <th>Qty</th>
               <th>Scan Policy</th>
               <th>Mandatory</th>
@@ -174,59 +195,52 @@ const StagePartRequirementMaster = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((row, i) => (
-              <tr key={row.stage_part_req_id}>
-                <td>{i + 1}</td>
-                <td>{row.route_step_id}</td>
-                <td>{row.part_id}</td>
-                <td>{row.quantity_required}</td>
-                <td>{row.scan_policy}</td>
-                <td>
-                  <span
-                    className={`badge ${
-                      row.mandatory ? "bg-success" : "bg-secondary"
-                    }`}
-                  >
-                    {row.mandatory ? "Yes" : "No"}
-                  </span>
-                </td>
-                <td className="text-end">
-                  <button
-                    className="btn btn-outline-secondary btn-sm me-2"
-                    onClick={() => handleView(row)}
-                  >
-                    <Eye size={14} />
-                  </button>
-                  <button
-                    className="btn btn-outline-primary btn-sm me-2"
-                    onClick={() => handleEdit(row)}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() =>
-                      handleDelete(row.stage_part_req_id)
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-
-            {filteredRows.length === 0 && (
+            {isLoading && (
               <tr>
-                <td colSpan="7" className="text-center text-muted py-4">
-                  No records found
+                <td colSpan="7" className="text-center py-4">
+                  Loading...
                 </td>
               </tr>
             )}
+
+            {!isLoading &&
+              requirements.map((row, i) => (
+                <tr key={row.req_id}>
+                  <td>{i + 1}</td>
+                  <td>{getRouteStepName(row.route_step_id)}</td>
+                  <td>{getPartName(row.part_id)}</td>
+                  <td>{row.qty_required}</td>
+                  <td>
+                    {row.scan_policy === "EACH_PART"
+                      ? "Each Part"
+                      : "Batch Once"}
+                  </td>
+                  <td>
+                    {row.mandatory ? "Yes" : "No"}
+                  </td>
+                  <td className="text-end">
+                    <button
+                      className="btn btn-outline-primary btn-sm me-2"
+                      onClick={() => handleEdit(row)}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={() =>
+                        handleDelete(row.req_id)
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
 
-      {/* ================= ADD / EDIT MODAL ================= */}
+      {/* MODAL */}
       {showModal && (
         <div
           style={{
@@ -234,38 +248,100 @@ const StagePartRequirementMaster = () => {
             inset: 0,
             background: "rgba(0,0,0,0.5)",
             display: "flex",
-            alignItems: "center",
             justifyContent: "center",
+            alignItems: "center",
             zIndex: 1050,
           }}
         >
-          <div className="bg-white rounded-4 shadow p-4" style={{ width: 480 }}>
+          <div
+            className="bg-white rounded-4 shadow p-4"
+            style={{ width: 500 }}
+          >
             <h5 className="mb-3">
-              {isEditing ? "Edit Requirement" : "Add Requirement"}
+              {isEditing
+                ? "Edit Requirement"
+                : "Add Requirement"}
             </h5>
 
-            {[
-              ["Route Step ID", "route_step_id"],
-              ["Part ID", "part_id"],
-              ["Quantity", "quantity_required"],
-              ["Scan Policy", "scan_policy"],
-            ].map(([label, key]) => (
-              <div className="mb-2" key={key}>
-                <label className="form-label">{label}</label>
-                <input
-                  className="form-control"
-                  value={formData[key]}
-                  onChange={(e) =>
-                    setFormData({ ...formData, [key]: e.target.value })
-                  }
-                />
-              </div>
-            ))}
+            <select
+              className="form-control mb-2"
+              value={formData.route_step_id}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  route_step_id: e.target.value,
+                })
+              }
+              disabled={isEditing}
+            >
+              <option value="">Select Route Step</option>
+              {routeSteps.map((r) => (
+                <option
+                  key={r.route_step_id}
+                  value={r.route_step_id}
+                >
+                  SEQ {r.seq_no} - Stage {r.stage_id}
+                </option>
+              ))}
+            </select>
 
-            <div className="form-check mb-3">
+            <select
+              className="form-control mb-2"
+              value={formData.part_id}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  part_id: e.target.value,
+                })
+              }
+              disabled={isEditing}
+            >
+              <option value="">Select Part</option>
+              {parts.map((p) => (
+                <option
+                  key={p.part_id}
+                  value={p.part_id}
+                >
+                  {p.part_no} - {p.part_name}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              className="form-control mb-2"
+              placeholder="Quantity Required"
+              value={formData.qty_required}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  qty_required: e.target.value,
+                })
+              }
+            />
+
+            <select
+              className="form-control mb-2"
+              value={formData.scan_policy}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  scan_policy: e.target.value,
+                })
+              }
+            >
+              <option value="EACH_PART">
+                EACH_PART
+              </option>
+              <option value="BATCH_ONCE">
+                BATCH_ONCE
+              </option>
+            </select>
+
+            <div className="form-check">
               <input
-                className="form-check-input"
                 type="checkbox"
+                className="form-check-input"
                 checked={formData.mandatory}
                 onChange={(e) =>
                   setFormData({
@@ -274,59 +350,23 @@ const StagePartRequirementMaster = () => {
                   })
                 }
               />
-              <label className="form-check-label">Mandatory</label>
+              <label className="form-check-label">
+                Mandatory
+              </label>
             </div>
 
-            <div className="d-flex justify-content-end gap-2">
+            <div className="d-flex justify-content-end gap-2 mt-3">
               <button
                 className="btn btn-secondary"
                 onClick={() => setShowModal(false)}
               >
                 Cancel
               </button>
-              <button className="btn btn-danger" onClick={handleSave}>
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= VIEW MODAL ================= */}
-      {showView && viewData && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1050,
-          }}
-        >
-          <div className="bg-white rounded-4 shadow p-4" style={{ width: 420 }}>
-            <h5 className="mb-3">Requirement Details</h5>
-
-            {[
-              ["Route Step ID", viewData.route_step_id],
-              ["Part ID", viewData.part_id],
-              ["Quantity", viewData.quantity_required],
-              ["Scan Policy", viewData.scan_policy],
-              ["Mandatory", viewData.mandatory ? "Yes" : "No"],
-            ].map(([k, v]) => (
-              <div key={k} className="d-flex justify-content-between mb-1">
-                <strong className="text-muted">{k}</strong>
-                <span>{v ?? "-"}</span>
-              </div>
-            ))}
-
-            <div className="text-end mt-3">
               <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowView(false)}
+                className="btn btn-danger"
+                onClick={handleSave}
               >
-                Close
+                Save
               </button>
             </div>
           </div>
@@ -336,4 +376,4 @@ const StagePartRequirementMaster = () => {
   );
 };
 
-export default StagePartRequirementMaster;
+export default RoutePartRequirementMaster;

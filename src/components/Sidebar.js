@@ -150,24 +150,23 @@ const Sidebar = ({ isOpen, onClose }) => {
 
             <div className="sidebar-title">Masters</div>
 
-            <li className="nav-item">
+  <li className="nav-item">
               <NavLink
-                to="/model-master"
+                to="/plant-master"
                 className="nav-link"
                 onClick={onClose}
               >
-                <i className="bi bi-box"></i>
-                <span>Model Master</span>
+                <i className="bi bi-layers"></i>
+                <span>Plant Master</span>
               </NavLink>
             </li>
-            <li className="nav-item">
-              <NavLink to="/part-master" className="nav-link" onClick={onClose}>
-                <i className="bi bi-box-seam"></i>
-                <span>Part Master</span>
+             <li className="nav-item">
+              <NavLink to="/line-master" className="nav-link" onClick={onClose}>
+                <i className="bi bi-diagram-3"></i>
+                <span>Line Master</span>
               </NavLink>
             </li>
-
-            <li className="nav-item">
+             <li className="nav-item">
               <NavLink
                 to="/stage-master"
                 className="nav-link"
@@ -178,22 +177,36 @@ const Sidebar = ({ isOpen, onClose }) => {
               </NavLink>
             </li>
             <li className="nav-item">
-              <NavLink to="/line-master" className="nav-link" onClick={onClose}>
-                <i className="bi bi-diagram-3"></i>
-                <span>Line Master</span>
+              <NavLink
+                to="/model-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-box"></i>
+                <span>Model Master</span>
               </NavLink>
             </li>
-            <li className="nav-item">
+             <li className="nav-item">
               <NavLink
                 to="/process-master"
                 className="nav-link"
                 onClick={onClose}
               >
                 <i className="bi bi-diagram-3"></i>
-                <span>Process Master</span>
+                <span>Operation Master</span>
               </NavLink>
             </li>
-            <li className="nav-item">
+             <li className="nav-item">
+              <NavLink
+                to="/route-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-diagram-3"></i>
+                <span>Route Master</span>
+              </NavLink>
+            </li>
+             <li className="nav-item">
               <NavLink
                 to="/route-step-master"
                 className="nav-link"
@@ -204,11 +217,31 @@ const Sidebar = ({ isOpen, onClose }) => {
               </NavLink>
             </li>
             <li className="nav-item">
+              <NavLink to="/part-master" className="nav-link" onClick={onClose}>
+                <i className="bi bi-box-seam"></i>
+                <span>Part Master</span>
+              </NavLink>
+            </li>
+<li className="nav-item">
+              <NavLink to="/barcode-rules-master" className="nav-link" onClick={onClose}>
+                <i className="bi bi-file-earmark-text"></i>
+                <span>Barcode Rule Master</span>
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink to="/stage-part-requirement" className="nav-link" onClick={onClose}>
+                <i className="bi bi-file-earmark-text"></i>
+                <span>Route Part Requirement Master</span>
+              </NavLink>
+            </li>
+            
+            <li className="nav-item">
               <NavLink to="/tool-master" className="nav-link" onClick={onClose}>
                 <i className="bi bi-diagram-3"></i>
                 <span>Tool Master</span>
               </NavLink>
             </li>
+
             <li className="nav-item">
               <NavLink
                 to="/tool-program-master"
@@ -217,6 +250,66 @@ const Sidebar = ({ isOpen, onClose }) => {
               >
                 <i className="bi bi-diagram-3"></i>
                 <span>Tool Program Master</span>
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink
+                to="/recipe-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-diagram-3"></i>
+                <span>Recipe Master</span>
+              </NavLink>
+            </li>
+<li className="nav-item">
+              <NavLink
+                to="/recipe-process-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-diagram-3"></i>
+                <span>Recipe Process Master</span>
+              </NavLink>
+            </li>
+          <li className="nav-item">
+              <NavLink
+                to="/recipe-partscan-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-diagram-3"></i>
+                <span>Recipe Partscan Master</span>
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink
+                to="/plc-tag-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-diagram-3"></i>
+                <span>PLC Tag Master</span>
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink
+                to="/pokayoke-recipe-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-diagram-3"></i>
+                <span>Pokayoke Recipe Master</span>
+              </NavLink>
+            </li>
+          <li className="nav-item">
+              <NavLink
+                to="/Production-Receipt-master"
+                className="nav-link"
+                onClick={onClose}
+              >
+                <i className="bi bi-diagram-3"></i>
+                <span>Production receipt Master</span>
               </NavLink>
             </li>
 
@@ -242,16 +335,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               </NavLink>
             </li>
 
-            <li className="nav-item">
-              <NavLink
-                to="/recipe-master"
-                className="nav-link"
-                onClick={onClose}
-              >
-                <i className="bi bi-diagram-3"></i>
-                <span>Recipe Master</span>
-              </NavLink>
-            </li>
+
             <li className="nav-item">
               <NavLink
                 to="/barcode-rules-master"
@@ -344,56 +428,11 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <span> Stage Document Map Master</span>
               </NavLink>
             </li>
-             <li className="nav-item">
-              <NavLink to="/stage-part-requirement" className="nav-link" onClick={onClose}>
-                <i className="bi bi-file-earmark-text"></i>
-                <span>Stage Part Requirement Master</span>
-              </NavLink>
-            </li>
+            
 
 
             
             <div className="sidebar-title">Configuration</div>
-
-            <li className="nav-item">
-              <NavLink
-                to="/part-scanning-master"
-                className="nav-link"
-                onClick={onClose}
-              >
-                <i className="bi bi-layers"></i>
-                <span>Part Scanning Master</span>
-              </NavLink>
-            </li>
-
-            <li className="nav-item">
-              <NavLink
-                to="/plant-master"
-                className="nav-link"
-                onClick={onClose}
-              >
-                <i className="bi bi-layers"></i>
-                <span>Plant Master</span>
-              </NavLink>
-            </li>
-
-            <li className="nav-item">
-              <NavLink to="/dc-tool" className="nav-link" onClick={onClose}>
-                <i className="bi bi-tools"></i>
-                <span>DC Tool</span>
-              </NavLink>
-            </li>
-
-            <li className="nav-item">
-              <NavLink
-                to="/leak-test-master"
-                className="nav-link"
-                onClick={onClose}
-              >
-                <i className="bi bi-droplet"></i>
-                <span>Leak Test</span>
-              </NavLink>
-            </li>
 
             <li className="nav-item">
               <NavLink to="/sop" className="nav-link" onClick={onClose}>

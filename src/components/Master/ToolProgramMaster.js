@@ -1,24 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import axios from "axios";
 import { Pencil, Trash2, Plus, RotateCcw, Eye } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import API_BASE_URL from "../../config";
 
-const TOOL_PROGRAM_API = `${API_BASE_URL}/api/toolprogrammaster`;
-const TOOL_API = `${API_BASE_URL}/api/toolmaster`;
+const TOOL_PROGRAM_API = `${API_BASE_URL}/api/tool-programs`;
+const TOOL_API = `${API_BASE_URL}/api/tools`;
 
 const emptyForm = {
   tool_id: "",
   program_no: "",
   program_name: "",
-  active: true,
+  is_active: true,
 };
 
 const ToolProgramMaster = () => {
-  const [programs, setPrograms] = useState([]);
-  const [tools, setTools] = useState([]);
+  const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState({
-    tool_id: "",
+    tool_code: "",
     program_no: "",
   });
 
@@ -28,34 +28,79 @@ const ToolProgramMaster = () => {
   const [showView, setShowView] = useState(false);
   const [viewData, setViewData] = useState(null);
 
-  // ================= LOAD DATA =================
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  /* ================= FETCH ================= */
 
-  const fetchAll = async () => {
-    const [p, t] = await Promise.all([
-      axios.get(TOOL_PROGRAM_API),
-      axios.get(TOOL_API),
-    ]);
-    setPrograms(p.data);
-    setTools(t.data);
-  };
+  const { data: programs = [] } = useQuery({
+    queryKey: ["tool-programs"],
+    queryFn: async () => {
+      const res = await axios.get(TOOL_PROGRAM_API);
+      return res.data || [];
+    },
+  });
 
-  // ================= FILTER =================
+  const { data: tools = [] } = useQuery({
+    queryKey: ["tools"],
+    queryFn: async () => {
+      const res = await axios.get(TOOL_API);
+      return res.data || [];
+    },
+  });
+
+  /* ================= TOOL MAP (FAST LOOKUP) ================= */
+
+  const toolMap = useMemo(() => {
+    const map = {};
+    tools.forEach((t) => {
+      map[t.tool_id] = t.tool_code;
+    });
+    return map;
+  }, [tools]);
+
+  /* ================= FILTER ================= */
+
   const filteredPrograms = useMemo(() => {
-    return programs.filter(
-      (p) =>
-        String(p.tool_id).includes(filters.tool_id) &&
-        String(p.program_no).includes(filters.program_no)
-    );
-  }, [programs, filters]);
+    return programs.filter((p) => {
+      const toolCode = toolMap[p.tool_id] || "";
 
-  // ================= HELPERS =================
-  const getToolName = (toolId) =>
-    tools.find((t) => t.tool_id === toolId)?.tool_code || toolId;
+      return (
+        toolCode
+          .toLowerCase()
+          .includes(filters.tool_code.toLowerCase()) &&
+        String(p.program_no || "")
+          .toLowerCase()
+          .includes(filters.program_no.toLowerCase())
+      );
+    });
+  }, [programs, filters, toolMap]);
 
-  // ================= CRUD =================
+  /* ================= MUTATIONS ================= */
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      if (isEditing) {
+        return axios.put(
+          `${TOOL_PROGRAM_API}/${formData.program_id}`,
+          payload
+        );
+      }
+      return axios.post(TOOL_PROGRAM_API, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-programs"] });
+      setShowModal(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id) =>
+      axios.delete(`${TOOL_PROGRAM_API}/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-programs"] });
+    },
+  });
+
+  /* ================= CRUD ================= */
+
   const handleAdd = () => {
     setIsEditing(false);
     setFormData(emptyForm);
@@ -65,50 +110,39 @@ const ToolProgramMaster = () => {
   const handleEdit = (row) => {
     setIsEditing(true);
     setFormData({
-      tool_program_id: row.tool_program_id,
-      tool_id: String(row.tool_id),
+      program_id: row.program_id,
+      tool_id: row.tool_id,
       program_no: String(row.program_no),
       program_name: row.program_name || "",
-      active: row.active,
+      is_active: row.is_active,
     });
     setShowModal(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!formData.tool_id) {
       alert("Please select Tool");
       return;
     }
+
     if (!formData.program_no) {
       alert("Program No is required");
       return;
     }
 
     const payload = {
-      tool_id: Number(formData.tool_id),
+      tool_id: formData.tool_id, // ✅ UUID
       program_no: Number(formData.program_no),
       program_name: formData.program_name,
-      active: formData.active,
+      is_active: formData.is_active,
     };
 
-    if (isEditing) {
-      await axios.put(
-        `${TOOL_PROGRAM_API}/${formData.tool_program_id}`,
-        payload
-      );
-    } else {
-      await axios.post(TOOL_PROGRAM_API, payload);
-    }
-
-    setShowModal(false);
-    fetchAll();
+    saveMutation.mutate(payload);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this program?")) {
-      await axios.delete(`${TOOL_PROGRAM_API}/${id}`);
-      fetchAll();
-    }
+  const handleDelete = (id) => {
+    if (!window.confirm("Delete this program?")) return;
+    deleteMutation.mutate(id);
   };
 
   const handleView = (row) => {
@@ -116,10 +150,11 @@ const ToolProgramMaster = () => {
     setShowView(true);
   };
 
-  // ================= UI =================
+  /* ================= UI ================= */
+
   return (
     <div className="container-fluid py-3">
-      {/* ================= HEADER + FILTERS ================= */}
+      {/* ================= HEADER ================= */}
       <div
         className="card shadow-sm rounded-4 mb-2 mx-2"
         style={{
@@ -132,17 +167,16 @@ const ToolProgramMaster = () => {
         <div className="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
           <div>
             <h4 className="fw-bold mb-1">Tool Program Master</h4>
-           
           </div>
 
           <div className="d-flex gap-2 flex-wrap align-items-center">
             <input
               className="form-control"
-              placeholder="Tool ID"
+              placeholder="Tool Code"
               style={{ width: 120 }}
-              value={filters.tool_id}
+              value={filters.tool_code}
               onChange={(e) =>
-                setFilters({ ...filters, tool_id: e.target.value })
+                setFilters({ ...filters, tool_code: e.target.value })
               }
             />
 
@@ -163,7 +197,7 @@ const ToolProgramMaster = () => {
               className="btn btn-sm"
               style={{ background: "#d3e7f3" }}
               onClick={() =>
-                setFilters({ tool_id: "", program_no: "" })
+                setFilters({ tool_code: "", program_no: "" })
               }
             >
               <RotateCcw size={14} />
@@ -195,20 +229,20 @@ const ToolProgramMaster = () => {
           </thead>
           <tbody>
             {filteredPrograms.map((row, i) => (
-              <tr key={row.tool_program_id}>
+              <tr key={row.program_id}>
                 <td>{i + 1}</td>
-                <td>{getToolName(row.tool_id)}</td>
+                <td>{toolMap[row.tool_id] || "-"}</td>
                 <td>{row.program_no}</td>
                 <td>{row.program_name}</td>
                 <td>
                   <span
                     className={`badge ${
-                      row.active
+                      row.is_active
                         ? "bg-success"
                         : "bg-secondary"
                     }`}
                   >
-                    {row.active ? "Active" : "Inactive"}
+                    {row.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
                 <td className="text-end">
@@ -227,7 +261,7 @@ const ToolProgramMaster = () => {
                   <button
                     className="btn btn-outline-danger btn-sm"
                     onClick={() =>
-                      handleDelete(row.tool_program_id)
+                      handleDelete(row.program_id)
                     }
                   >
                     <Trash2 size={14} />
@@ -247,7 +281,7 @@ const ToolProgramMaster = () => {
         </table>
       </div>
 
-      {/* ================= ADD / EDIT MODAL ================= */}
+      {/* ================= MODAL ================= */}
       {showModal && (
         <div
           style={{
@@ -265,65 +299,49 @@ const ToolProgramMaster = () => {
               {isEditing ? "Edit Tool Program" : "Add Tool Program"}
             </h5>
 
-            <div className="mb-2">
-              <label className="form-label">Tool</label>
-              <select
-                className="form-control"
-                value={formData.tool_id}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    tool_id: e.target.value,
-                  })
-                }
-              >
-                <option value="">Select Tool</option>
-                {tools.map((t) => (
-                  <option key={t.tool_id} value={t.tool_id}>
-                    {t.tool_code}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              className="form-control mb-2"
+              value={formData.tool_id}
+              onChange={(e) =>
+                setFormData({ ...formData, tool_id: e.target.value })
+              }
+            >
+              <option value="">Select Tool</option>
+              {tools.map((t) => (
+                <option key={t.tool_id} value={t.tool_id}>
+                  {t.tool_code}
+                </option>
+              ))}
+            </select>
 
-            <div className="mb-2">
-              <label className="form-label">Program No</label>
-              <input
-                type="number"
-                className="form-control"
-                value={formData.program_no}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    program_no: e.target.value,
-                  })
-                }
-              />
-            </div>
+            <input
+              type="number"
+              className="form-control mb-2"
+              placeholder="Program No"
+              value={formData.program_no}
+              onChange={(e) =>
+                setFormData({ ...formData, program_no: e.target.value })
+              }
+            />
 
-            <div className="mb-2">
-              <label className="form-label">Program Name</label>
-              <input
-                className="form-control"
-                value={formData.program_name}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    program_name: e.target.value,
-                  })
-                }
-              />
-            </div>
+            <input
+              className="form-control mb-2"
+              placeholder="Program Name"
+              value={formData.program_name}
+              onChange={(e) =>
+                setFormData({ ...formData, program_name: e.target.value })
+              }
+            />
 
             <div className="form-check mb-3">
               <input
                 className="form-check-input"
                 type="checkbox"
-                checked={formData.active}
+                checked={formData.is_active}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    active: e.target.checked,
+                    is_active: e.target.checked,
                   })
                 }
               />
@@ -337,8 +355,12 @@ const ToolProgramMaster = () => {
               >
                 Cancel
               </button>
-              <button className="btn btn-danger" onClick={handleSave}>
-                Save
+              <button
+                className="btn btn-danger"
+                onClick={handleSave}
+                disabled={saveMutation.isPending}
+              >
+                {saveMutation.isPending ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
@@ -362,10 +384,10 @@ const ToolProgramMaster = () => {
             <h5 className="mb-3">Tool Program Details</h5>
 
             {[
-              ["Tool", getToolName(viewData.tool_id)],
+              ["Tool", toolMap[viewData.tool_id]],
               ["Program No", viewData.program_no],
               ["Program Name", viewData.program_name],
-              ["Status", viewData.active ? "Active" : "Inactive"],
+              ["Status", viewData.is_active ? "Active" : "Inactive"],
             ].map(([k, v]) => (
               <div
                 key={k}

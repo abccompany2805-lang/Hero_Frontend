@@ -1,35 +1,34 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import { Pencil, Trash2, Plus, RotateCcw, Eye } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import API_BASE_URL from "../../config";
 
-const ROUTE_API = `${API_BASE_URL}/api/routestepmaster`;
-const STAGE_API = `${API_BASE_URL}/api/stagemaster`;
-const PROCESS_API = `${API_BASE_URL}/api/processmaster`;
-const MODEL_API = `${API_BASE_URL}/api/modelmaster`;
-
+const ROUTE_STEP_API = `${API_BASE_URL}/api/route-steps`;
+const ROUTES_API = `${API_BASE_URL}/api/routes`;
+const MODELS_API = `${API_BASE_URL}/api/models`;
+const STAGE_API = `${API_BASE_URL}/api/stages`;
+const OP_API = `${API_BASE_URL}/api/operations`;
 
 const emptyForm = {
   model_id: "",
+  route_version: "",
+  route_id: "",
   stage_id: "",
-  process_id: "",
-  sequence_no: "",
+  operation_id: "",
+  seq_no: "",
   mandatory: true,
   allow_bypass: false,
-  max_entry_count: 1,
+  allow_repeat: true,
+  max_retries: 0,
 };
 
-
 const RouteStepMaster = () => {
-  const [routeSteps, setRouteSteps] = useState([]);
-  const [stages, setStages] = useState([]);
-  const [processes, setProcesses] = useState([]);
-  const [models, setModels] = useState([]);
-
+  const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState({
-    stage_id: "",
-    process_id: "",
+    stage_name: "",
+    operation_name: "",
   });
 
   const [formData, setFormData] = useState(emptyForm);
@@ -37,99 +36,190 @@ const RouteStepMaster = () => {
   const [showModal, setShowModal] = useState(false);
   const [showView, setShowView] = useState(false);
   const [viewData, setViewData] = useState(null);
-  
 
-  // ================= LOAD DATA =================
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  /* ================= FETCH ================= */
 
-const fetchAll = async () => {
-  const [r, s, p, m] = await Promise.all([
-    axios.get(ROUTE_API),
-    axios.get(STAGE_API),
-    axios.get(PROCESS_API),
-    axios.get(MODEL_API),
-  ]);
+  const { data: routeSteps = [] } = useQuery({
+    queryKey: ["route-steps"],
+    queryFn: async () => {
+      const res = await axios.get(ROUTE_STEP_API);
+      return res.data || [];
+    },
+  });
 
-  setRouteSteps(r.data);
-  setStages(s.data);
-  setProcesses(p.data);
-  setModels(m.data);
-};
+  const { data: routes = [] } = useQuery({
+    queryKey: ["routes"],
+    queryFn: async () => {
+      const res = await axios.get(ROUTES_API);
+      return res.data || [];
+    },
+  });
 
+  const { data: models = [] } = useQuery({
+    queryKey: ["models"],
+    queryFn: async () => {
+      const res = await axios.get(MODELS_API);
+      return res.data || [];
+    },
+  });
 
-  // ================= FILTER =================
-  const filteredRouteSteps = useMemo(() => {
-    return routeSteps.filter(
-      (r) =>
-        String(r.stage_id).includes(filters.stage_id) &&
-        String(r.process_id).includes(filters.process_id)
-    );
-  }, [routeSteps, filters]);
+  const { data: stages = [] } = useQuery({
+    queryKey: ["stages"],
+    queryFn: async () => {
+      const res = await axios.get(STAGE_API);
+      return res.data || [];
+    },
+  });
 
-  // ================= HELPERS =================
+  const { data: operations = [] } = useQuery({
+    queryKey: ["operations"],
+    queryFn: async () => {
+      const res = await axios.get(OP_API);
+      return res.data || [];
+    },
+  });
+
+  /* ================= HELPERS ================= */
+
   const getStageName = (id) =>
-    stages.find((s) => s.stage_id === id)?.stage_name || id;
+    stages.find((s) => s.stage_id === id)?.stage_name || "-";
 
-  const getProcessName = (id) =>
-    processes.find((p) => p.process_id === id)?.operation_name || id;
+  const getOperationName = (id) =>
+    operations.find((o) => o.operation_id === id)?.operation_name || "-";
 
-  // ================= CRUD =================
+  const getRoute = (route_id) =>
+    routes.find((r) => r.route_id === route_id);
+
+  const getModelName = (model_id) =>
+    models.find((m) => m.model_id === model_id)?.model_name || "-";
+
+  /* ================= FILTER ================= */
+
+  const filteredRouteSteps = useMemo(() => {
+    return routeSteps.filter((r) => {
+      const stageName = getStageName(r.stage_id);
+      const operationName = getOperationName(r.operation_id);
+
+      const stageMatch = filters.stage_name
+        ? stageName
+            .toLowerCase()
+            .includes(filters.stage_name.toLowerCase())
+        : true;
+
+      const operationMatch = filters.operation_name
+        ? operationName
+            .toLowerCase()
+            .includes(filters.operation_name.toLowerCase())
+        : true;
+
+      return stageMatch && operationMatch;
+    });
+  }, [routeSteps, filters, stages, operations]);
+
+  /* ================= VERSION FILTER BASED ON MODEL ================= */
+
+  const versionsForModel = useMemo(() => {
+    if (!formData.model_id) return [];
+    return routes.filter((r) => r.model_id === formData.model_id);
+  }, [formData.model_id, routes]);
+
+  /* ================= AUTO SET ROUTE ID ================= */
+
+  useEffect(() => {
+    if (formData.model_id && formData.route_version) {
+      const selectedRoute = routes.find(
+        (r) =>
+          r.model_id === formData.model_id &&
+          Number(r.route_version) ===
+            Number(formData.route_version)
+      );
+
+      if (selectedRoute) {
+        setFormData((prev) => ({
+          ...prev,
+          route_id: selectedRoute.route_id,
+        }));
+      }
+    }
+  }, [formData.model_id, formData.route_version, routes]);
+
+  /* ================= MUTATIONS ================= */
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      if (isEditing) {
+        return axios.put(
+          `${ROUTE_STEP_API}/${formData.route_step_id}`,
+          payload
+        );
+      }
+      return axios.post(ROUTE_STEP_API, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["route-steps"],
+      });
+      setShowModal(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id) =>
+      axios.delete(`${ROUTE_STEP_API}/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["route-steps"],
+      });
+    },
+  });
+
+  /* ================= CRUD ================= */
+
   const handleAdd = () => {
     setIsEditing(false);
     setFormData(emptyForm);
     setShowModal(true);
   };
 
-const handleEdit = (row) => {
-  setIsEditing(true);
-  setFormData({
-    route_step_id: row.route_step_id,
-    model_id: row.model_id,
-    stage_id: row.stage_id,
-    process_id: row.process_id,
-    sequence_no: row.sequence_no,
-    mandatory: row.mandatory,
-    allow_bypass: row.allow_bypass,
-    max_entry_count: row.max_entry_count,
-  });
-  setShowModal(true);
-};
+  const handleEdit = (row) => {
+    const route = getRoute(row.route_id);
 
+    setIsEditing(true);
+    setFormData({
+      route_step_id: row.route_step_id,
+      model_id: route?.model_id || "",
+      route_version: route?.route_version || "",
+      route_id: row.route_id,
+      stage_id: row.stage_id || "",
+      operation_id: row.operation_id || "",
+      seq_no: row.seq_no ?? "",
+      mandatory: !!row.mandatory,
+      allow_bypass: !!row.allow_bypass,
+      allow_repeat: !!row.allow_repeat,
+      max_retries: row.max_retries ?? 0,
+    });
 
-  const handleSave = async () => {
-
-const payload = {
- model_id: formData.model_id ? Number(formData.model_id) : null,
-
-  stage_id: Number(formData.stage_id),
-  process_id: Number(formData.process_id),
-  sequence_no: Number(formData.sequence_no),
-  mandatory: formData.mandatory,
-  allow_bypass: formData.allow_bypass,
-  max_entry_count: Number(formData.max_entry_count),
-};
-
-
-    if (isEditing) {
-      await axios.put(
-        `${ROUTE_API}/${formData.route_step_id}`,
-        payload
-      );
-    } else {
-      await axios.post(ROUTE_API, payload);
-    }
-
-    setShowModal(false);
-    fetchAll();
+    setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this route step?")) {
-      await axios.delete(`${ROUTE_API}/${id}`);
-      fetchAll();
-    }
+  const handleSave = () => {
+    const payload = {
+      route_id: formData.route_id,
+      stage_id: formData.stage_id,
+      operation_id: formData.operation_id,
+      seq_no: Number(formData.seq_no),
+      mandatory: !!formData.mandatory,
+      allow_bypass: !!formData.allow_bypass,
+      allow_repeat: !!formData.allow_repeat,
+      max_retries: Number(formData.max_retries),
+    };
+
+    saveMutation.mutate(payload);
+  };
+
+  const handleDelete = (id) => {
+    if (!window.confirm("Delete this route step?")) return;
+    deleteMutation.mutate(id);
   };
 
   const handleView = (row) => {
@@ -137,351 +227,427 @@ const payload = {
     setShowView(true);
   };
 
-  // ================= UI =================
-
-
   return (
-  <div className="container-fluid py-3">
+    <div className="container-fluid py-3">
+      {/* HEADER */}
+      <div className="card shadow-sm rounded-4 mb-2 mx-2"
+                style={{
+          borderLeft: "5px solid #dc3545",
+          borderTop: 0,
+          borderRight: 0,
+          borderBottom: 0,
+        }}>
+        <div className="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+          <h4 className="fw-bold mb-1">
+            Route Step Master
+          </h4>
 
-    {/* ================= HEADER + FILTERS ================= */}
-    <div
-      className="card shadow-sm rounded-4 mb-2 mx-2"
-      style={{
-        borderLeft: "5px solid #dc3545",
-        borderTop: 0,
-        borderRight: 0,
-        borderBottom: 0,
-      }}
-    >
-      <div className="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-          <h4 className="fw-bold mb-1">Route Step Master</h4>
-          
-        </div>
+          <div className="d-flex gap-2 flex-wrap align-items-center">
 
-        <div className="d-flex gap-2 flex-wrap align-items-center">
-          <input
-            className="form-control"
-            placeholder="Stage ID"
-            style={{ width: 140 }}
-            value={filters.stage_id}
-            onChange={(e) =>
-              setFilters({ ...filters, stage_id: e.target.value })
-            }
-          />
-
-          <input
-            className="form-control"
-            placeholder="Process ID"
-            style={{ width: 140 }}
-            value={filters.process_id}
-            onChange={(e) =>
-              setFilters({ ...filters, process_id: e.target.value })
-            }
-          />
-
-          <button
-            className="btn btn-sm"
-            style={{ background: "#d3e7f3" }}
-            onClick={() =>
-              setFilters({ stage_id: "", process_id: "" })
-            }
-          >
-            <RotateCcw size={14} />
-          </button>
-
-          <button
-            className="btn btn-danger btn-sm d-flex align-items-center gap-1"
-            onClick={handleAdd}
-          >
-            <Plus size={14} />
-            Add Route Step
-          </button>
-        </div>
-      </div>
-    </div>
-
-    {/* ================= TABLE ================= */}
-    <div className="table-responsive card shadow-sm border-0 rounded-4 my-4 mx-2">
-      <table className="table table-bordered align-middle mb-0">
-        <thead className="border-bottom">
-          <tr className="text-muted">
-            <th>Sr</th>
-            <th>Stage</th>
-            <th>Process</th>
-            <th>Model</th>
-            <th>Seq</th>
-            <th>Mandatory</th>
-            <th>Bypass</th>
-            <th>Max Entry</th>
-            <th className="text-end">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredRouteSteps.map((row, i) => (
-            <tr key={row.route_step_id}>
-              <td>{i + 1}</td>
-              <td>{getStageName(row.stage_id)}</td>
-              <td>{getProcessName(row.process_id)}</td>
-              <td>
-  {models.find(m => m.model_id === row.model_id)?.model_sku_name || row.model_id}
-</td>
-
-              <td>{row.sequence_no}</td>
-              <td>
-                <span
-                  className={`badge ${
-                    row.mandatory ? "bg-success" : "bg-secondary"
-                  }`}
-                >
-                  {row.mandatory ? "Yes" : "No"}
-                </span>
-              </td>
-              <td>
-                <span
-                  className={`badge ${
-                    row.allow_bypass ? "bg-warning text-dark" : "bg-secondary"
-                  }`}
-                >
-                  {row.allow_bypass ? "Yes" : "No"}
-                </span>
-              </td>
-              <td>{row.max_entry_count}</td>
-              <td className="text-end">
-                <button
-                  className="btn btn-outline-secondary btn-sm me-2"
-                  onClick={() => handleView(row)}
-                >
-                  <Eye size={14} />
-                </button>
-                <button
-                  className="btn btn-outline-primary btn-sm me-2"
-                  onClick={() => handleEdit(row)}
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  className="btn btn-outline-danger btn-sm"
-                  onClick={() =>
-                    handleDelete(row.route_step_id)
-                  }
-                >
-                  <Trash2 size={14} />
-                </button>
-              </td>
-            </tr>
-          ))}
-
-          {filteredRouteSteps.length === 0 && (
-            <tr>
-              <td colSpan="8" className="text-center text-muted py-4">
-                No records found
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-
-    {/* ================= ADD / EDIT MODAL ================= */}
-    {showModal && (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1050,
-        }}
-      >
-        <div className="bg-white rounded-4 shadow p-4" style={{ width: 520 }}>
-          <h5 className="mb-3">
-            {isEditing ? "Edit Route Step" : "Add Route Step"}
-          </h5>
-
-          <select
-            className="form-control mb-2"
-            value={formData.stage_id}
-            onChange={(e) =>
-              setFormData({ ...formData, stage_id: e.target.value })
-            }
-          >
-            <option value="">Select Stage</option>
-            {stages.map((s) => (
-              <option key={s.stage_id} value={s.stage_id}>
-                {s.stage_name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="form-control mb-2"
-            value={formData.process_id}
-            onChange={(e) =>
-              setFormData({ ...formData, process_id: e.target.value })
-            }
-          >
-            <option value="">Select Process</option>
-            {processes.map((p) => (
-              <option key={p.process_id} value={p.process_id}>
-                {p.operation_name}
-              </option>
-            ))}
-          </select>
-          {/* MODEL */}
-<div className="mb-2">
-  <label className="form-label">Model</label>
-  <select
-    className="form-control"
-    value={formData.model_id}
-    onChange={(e) =>
-      setFormData({ ...formData, model_id: e.target.value })
-    }
-  >
-    <option value="">Select Model</option>
-    {models.map((m) => (
-      <option key={m.model_id} value={m.model_id}>
-        {m.model_sku_name}
-      </option>
-    ))}
-  </select>
-</div>
-
-
-          <input
-            type="number"
-            className="form-control mb-2"
-            placeholder="Sequence No"
-            value={formData.sequence_no}
-            onChange={(e) =>
-              setFormData({ ...formData, sequence_no: e.target.value })
-            }
-          />
-
-          <input
-            type="number"
-            className="form-control mb-3"
-            placeholder="Max Entry Count"
-            value={formData.max_entry_count}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                max_entry_count: e.target.value,
-              })
-            }
-          />
-
-          <div className="form-check mb-2">
             <input
-              className="form-check-input"
-              type="checkbox"
-              checked={formData.mandatory}
+              className="form-control"
+              placeholder="Stage Name"
+              style={{ width: 160 }}
+              value={filters.stage_name}
               onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  mandatory: e.target.checked,
+                setFilters({
+                  ...filters,
+                  stage_name: e.target.value,
                 })
               }
             />
-            <label className="form-check-label">Mandatory</label>
-          </div>
 
-          <div className="form-check mb-3">
             <input
-              className="form-check-input"
-              type="checkbox"
-              checked={formData.allow_bypass}
+              className="form-control"
+              placeholder="Operation Name"
+              style={{ width: 160 }}
+              value={filters.operation_name}
               onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  allow_bypass: e.target.checked,
+                setFilters({
+                  ...filters,
+                  operation_name: e.target.value,
                 })
               }
             />
-            <label className="form-check-label">Allow Bypass</label>
-          </div>
 
-          <div className="d-flex justify-content-end gap-2">
             <button
-              className="btn btn-secondary"
-              onClick={() => setShowModal(false)}
+              className="btn btn-sm"
+              style={{ background: "#d3e7f3" }}
+              onClick={() =>
+                setFilters({
+                  stage_name: "",
+                  operation_name: "",
+                })
+              }
             >
-              Cancel
+              <RotateCcw size={14} />
             </button>
-            <button className="btn btn-danger" onClick={handleSave}>
-              Save
+
+            <button
+              className="btn btn-danger btn-sm d-flex align-items-center gap-1"
+              onClick={handleAdd}
+            >
+              <Plus size={14} />
+              Add Route Step
             </button>
           </div>
         </div>
       </div>
-    )}
 
-    {/* ================= VIEW MODAL ================= */}
-    {showView && viewData && (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1050,
-        }}
-      >
-        <div className="bg-white rounded-4 shadow p-4" style={{ width: 450 }}>
-          <h5 className="mb-3">Route Step Details</h5>
+      {/* TABLE */}
+      <div className="table-responsive card shadow-sm border-0 rounded-4 my-4 mx-2">
+        <table className="table table-bordered align-middle mb-0">
+          <thead>
+            <tr className="text-muted">
+              <th>Sr</th>
+              <th>Model</th>
+              <th>Version</th>
+              <th>Stage</th>
+              <th>Operation</th>
+              <th>Seq</th>
+              <th>Mandatory</th>
+              <th>Bypass</th>
+              <th>Repeat</th>
+              <th>Max Retries</th>
+              <th className="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRouteSteps.map((row, i) => {
+              const route = getRoute(row.route_id);
+              return (
+                <tr key={row.route_step_id}>
+                  <td>{i + 1}</td>
+                  <td>
+                    {getModelName(route?.model_id)}
+                  </td>
+                  <td>
+                    {route?.route_version || "-"}
+                  </td>
+                  <td>{getStageName(row.stage_id)}</td>
+                  <td>
+                    {getOperationName(row.operation_id)}
+                  </td>
+                  <td>{row.seq_no}</td>
+                  <td>
+                    {row.mandatory ? "Yes" : "No"}
+                  </td>
+                  <td>
+                    {row.allow_bypass ? "Yes" : "No"}
+                  </td>
+                  <td>
+                    {row.allow_repeat ? "Yes" : "No"}
+                  </td>
+                  <td>{row.max_retries ?? 0}</td>
+                  <td className="text-end">
+                    <button
+                      className="btn btn-outline-secondary btn-sm me-2"
+                      onClick={() => handleView(row)}
+                    >
+                      <Eye size={14} />
+                    </button>
+                    <button
+                      className="btn btn-outline-primary btn-sm me-2"
+                      onClick={() => handleEdit(row)}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={() =>
+                        handleDelete(row.route_step_id)
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
+      {/* MODAL CODE REMAINS SAME BUT WITH MODEL + VERSION DROPDOWN */}
+
+    {showModal && (
+  <div style={{
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1050,
+  }}>
+    <div className="bg-white rounded-4 shadow p-4"
+      style={{ width: 520 }}>
+      <h5 className="mb-3">
+        {isEditing ? "Edit Route Step" : "Add Route Step"}
+      </h5>
+
+      {/* MODEL */}
+      <div className="mb-2">
+        <label className="form-label fw-semibold">
+          Model
+        </label>
+        <select
+          className="form-control"
+          value={formData.model_id}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              model_id: e.target.value,
+              route_version: "",
+              route_id: "",
+            })
+          }
+          disabled={isEditing}
+        >
+          <option value="">Select Model</option>
+          {models.map((m) => (
+            <option key={m.model_id}
+              value={m.model_id}>
+              {m.model_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* VERSION */}
+      <div className="mb-2">
+        <label className="form-label fw-semibold">
+          Route Version
+        </label>
+        <select
+          className="form-control"
+          value={formData.route_version}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              route_version: e.target.value,
+            })
+          }
+          disabled={!formData.model_id}
+        >
+          <option value="">Select Version</option>
+          {versionsForModel.map((r) => (
+            <option key={r.route_id}
+              value={r.route_version}>
+              Version {r.route_version}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* STAGE */}
+      <div className="mb-2">
+        <label className="form-label fw-semibold">
+          Stage
+        </label>
+        <select
+          className="form-control"
+          value={formData.stage_id}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              stage_id: e.target.value,
+            })
+          }
+        >
+          <option value="">Select Stage</option>
+          {stages.map((s) => (
+            <option key={s.stage_id}
+              value={s.stage_id}>
+              {s.stage_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* OPERATION */}
+      <div className="mb-2">
+        <label className="form-label fw-semibold">
+          Operation
+        </label>
+        <select
+          className="form-control"
+          value={formData.operation_id}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              operation_id: e.target.value,
+            })
+          }
+        >
+          <option value="">Select Operation</option>
+          {operations.map((o) => (
+            <option key={o.operation_id}
+              value={o.operation_id}>
+              {o.operation_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* SEQUENCE */}
+      <div className="mb-2">
+        <label className="form-label fw-semibold">
+          Sequence Number
+        </label>
+        <input
+          type="number"
+          className="form-control"
+          value={formData.seq_no}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              seq_no: e.target.value,
+            })
+          }
+        />
+      </div>
+
+      {/* MAX RETRIES */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Max Retries
+        </label>
+        <input
+          type="number"
+          className="form-control"
+          value={formData.max_retries}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              max_retries: e.target.value,
+            })
+          }
+        />
+      </div>
+
+      <div className="d-flex justify-content-end gap-2">
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowModal(false)}>
+          Cancel
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={handleSave}>
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showView && viewData && (
+  <div style={{
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1050,
+  }}>
+    <div className="bg-white rounded-4 shadow p-4"
+      style={{ width: 450 }}>
+      <h5 className="mb-3">Route Step Details</h5>
+
+      {(() => {
+        const route = routes.find(
+          r => r.route_id === viewData.route_id
+        );
+        const modelName = models.find(
+          m => m.model_id === route?.model_id
+        )?.model_name;
+
+        return (
           <div className="d-flex flex-column gap-2">
+
             <div className="d-flex justify-content-between">
-              <strong className="text-muted">Stage</strong>
+              <strong className="text-muted">
+                Model
+              </strong>
+              <span>{modelName || "-"}</span>
+            </div>
+
+            <div className="d-flex justify-content-between">
+              <strong className="text-muted">
+                Version
+              </strong>
+              <span>{route?.route_version || "-"}</span>
+            </div>
+
+            <div className="d-flex justify-content-between">
+              <strong className="text-muted">
+                Stage
+              </strong>
               <span>{getStageName(viewData.stage_id)}</span>
             </div>
-            <div className="d-flex justify-content-between">
-              <strong className="text-muted">Process</strong>
-              <span>{getProcessName(viewData.process_id)}</span>
-            </div>
-            <div className="d-flex justify-content-between">
-  <strong className="text-muted">Model</strong>
-  <span>
-    {models.find(m => m.model_id === viewData.model_id)?.model_sku_name}
-  </span>
-</div>
 
             <div className="d-flex justify-content-between">
-              <strong className="text-muted">Sequence</strong>
-              <span>{viewData.sequence_no}</span>
+              <strong className="text-muted">
+                Operation
+              </strong>
+              <span>{getOperationName(viewData.operation_id)}</span>
             </div>
+
             <div className="d-flex justify-content-between">
-              <strong className="text-muted">Mandatory</strong>
+              <strong className="text-muted">
+                Sequence
+              </strong>
+              <span>{viewData.seq_no}</span>
+            </div>
+
+            <div className="d-flex justify-content-between">
+              <strong className="text-muted">
+                Mandatory
+              </strong>
               <span>{viewData.mandatory ? "Yes" : "No"}</span>
             </div>
+
             <div className="d-flex justify-content-between">
-              <strong className="text-muted">Allow Bypass</strong>
+              <strong className="text-muted">
+                Allow Bypass
+              </strong>
               <span>{viewData.allow_bypass ? "Yes" : "No"}</span>
             </div>
+
             <div className="d-flex justify-content-between">
-              <strong className="text-muted">Max Entry</strong>
-              <span>{viewData.max_entry_count}</span>
+              <strong className="text-muted">
+                Allow Repeat
+              </strong>
+              <span>{viewData.allow_repeat ? "Yes" : "No"}</span>
             </div>
-          </div>
 
-          <div className="text-end mt-3">
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowView(false)}
-            >
-              Close
-            </button>
+            <div className="d-flex justify-content-between">
+              <strong className="text-muted">
+                Max Retries
+              </strong>
+              <span>{viewData.max_retries ?? 0}</span>
+            </div>
+
           </div>
-        </div>
+        );
+      })()}
+
+      <div className="text-end mt-3">
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowView(false)}>
+          Close
+        </button>
       </div>
-    )}
+    </div>
   </div>
-);
+)}
 
+
+    </div>
+  );
 };
 
 export default RouteStepMaster;

@@ -2,21 +2,22 @@ import { useState, useEffect, useMemo } from "react";
 import { Pencil, Trash2, Plus, RotateCcw, Eye } from "lucide-react";
 import axios from "axios";
 import API_BASE_URL from "../../config";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
 
 const emptyForm = {
   line_code: "",
   line_name: "",
   plant_id: "",
-  product_type: "",
-  line_type: "",
-  pitch_or_index_time: "",
-  status: true,
+  pitch_mm: "",
+  is_active: true,
 };
 
+
 const LineMaster = () => {
-  const [allLines, setAllLines] = useState([]);
-  const [plants, setPlants] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // const [allLines, setAllLines] = useState([]);
+  // const [plants, setPlants] = useState([]);
+  // const [loading, setLoading] = useState(false);
 
   const [filters, setFilters] = useState({
     line_code: "",
@@ -33,35 +34,50 @@ const LineMaster = () => {
   /* =====================================================
      FETCH PLANTS (FOR DROPDOWN)
   ===================================================== */
-  const fetchPlants = async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/plantmaster`);
-      setPlants(res.data || []);
-    } catch (err) {
-      console.error("Failed to load plants", err);
-    }
-  };
+const { data: plants = [] } = useQuery({
+  queryKey: ["plants"],
+  queryFn: async () => {
+    const res = await axios.get(`${API_BASE_URL}/api/plants`);
+    return res.data;
+  },
+});
+
 
   /* =====================================================
      FETCH LINES
   ===================================================== */
-  const fetchLines = async () => {
-    try {
-      setLoading(true);
-      const res = await axios.get(`${API_BASE_URL}/api/linemaster`);
-      setAllLines(res.data || []);
-    } catch (err) {
-      console.error("Failed to load lines", err);
-      alert("Failed to load line data");
-    } finally {
-      setLoading(false);
-    }
-  };
+const {
+  data: allLines = [],
+  isLoading: loading,
+  refetch,
+} = useQuery({
+  queryKey: ["lines"],
+  queryFn: async () => {
+    const res = await axios.get(`${API_BASE_URL}/api/lines`);
+    return res.data;
+  },
+});
 
-  useEffect(() => {
-    fetchPlants();
-    fetchLines();
-  }, []);
+const queryClient = useQueryClient();
+
+
+const saveMutation = useMutation({
+  mutationFn: async (payload) => {
+    if (isEditing) {
+      return axios.put(
+        `${API_BASE_URL}/api/lines/${formData.line_id}`,
+        payload
+      );
+    } else {
+      return axios.post(`${API_BASE_URL}/api/lines`, payload);
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries(["lines"]);
+    setShowModal(false);
+  },
+});
+
 
   /* =====================================================
      FILTER
@@ -111,50 +127,67 @@ const LineMaster = () => {
   /* =====================================================
      POST / PUT
   ===================================================== */
-  const handleSave = async () => {
-    try {
-      const payload = {
-        ...formData,
-        pitch_or_index_time: Number(formData.pitch_or_index_time),
-        plant_id: Number(formData.plant_id),
-      };
+// const handleSave = async () => {
+//   try {
+//     const payload = {
+//       ...formData,
+//       pitch_mm: Number(formData.pitch_mm),
+//     };
 
-      if (isEditing) {
-        await axios.put(
-          `${API_BASE_URL}/api/linemaster/${formData.line_id}`,
-          payload
-        );
-      } else {
-        await axios.post(
-          `${API_BASE_URL}/api/linemaster`,
-          payload
-        );
-      }
+//     if (isEditing) {
+//       await axios.put(
+//         `${API_BASE_URL}/api/lines/${formData.line_id}`,
+//         payload
+//       );
+//     } else {
+//       await axios.post(
+//         `${API_BASE_URL}/api/lines`,
+//         payload
+//       );
+//     }
 
-      setShowModal(false);
-      fetchLines();
-    } catch (err) {
-      console.error("Save failed", err);
-      alert("Failed to save line");
-    }
+//     setShowModal(false);
+//     fetchLines();
+//   } catch (err) {
+//     console.error("Save failed", err.response?.data || err);
+//     alert("Failed to save line");
+//   }
+// };
+
+const handleSave = () => {
+  const payload = {
+    ...formData,
+    pitch_mm: Number(formData.pitch_mm),
   };
+
+  saveMutation.mutate(payload);
+};
+
+
+const deleteMutation = useMutation({
+  mutationFn: async (id) =>
+    axios.delete(`${API_BASE_URL}/api/lines/${id}`),
+  onSuccess: () => {
+    queryClient.invalidateQueries(["lines"]);
+  },
+});
 
   /* =====================================================
      DELETE
   ===================================================== */
-  const handleDelete = async (line_id) => {
-    if (!window.confirm("Delete this line?")) return;
+  // const handleDelete = async (line_id) => {
+  //   if (!window.confirm("Delete this line?")) return;
 
-    try {
-      await axios.delete(
-        `${API_BASE_URL}/api/linemaster/${line_id}`
-      );
-      fetchLines();
-    } catch (err) {
-      console.error("Delete failed", err);
-      alert("Failed to delete line");
-    }
-  };
+  //   try {
+  //     await axios.delete(
+  //       `${API_BASE_URL}/api/lines/${line_id}`
+  //     );
+  //     fetchLines();
+  //   } catch (err) {
+  //     console.error("Delete failed", err);
+  //     alert("Failed to delete line");
+  //   }
+  // };
 
   // return (
   //   <div className="container-fluid py-4">
@@ -432,7 +465,14 @@ const LineMaster = () => {
 
   //   </div>
   // );
-return (
+
+const handleDelete = (line_id) => {
+  if (!window.confirm("Delete this line?")) return;
+  deleteMutation.mutate(line_id);
+};
+
+
+  return (
   <div className="container-fluid py-3">
 
     {/* ================= HEADER + FILTERS ================= */}
@@ -519,10 +559,10 @@ return (
             <th>Line Code</th>
             <th>Line Name</th>
             <th>Plant</th>
-            <th>Product Type</th>
-            <th>Line Type</th>
-            <th>Pitch / Index (sec)</th>
-            <th>Status</th>
+            <th>Pitch (mm)</th>
+<th>Status</th>
+<th>Created At</th>
+
             <th className="text-end">Actions</th>
           </tr>
         </thead>
@@ -542,18 +582,18 @@ return (
                 <td>{row.line_code}</td>
                 <td>{row.line_name}</td>
                 <td>{getPlantName(row.plant_id)}</td>
-                <td>{row.product_type}</td>
-                <td>{row.line_type}</td>
-                <td>{row.pitch_or_index_time}</td>
-                <td>
-                  <span
-                    className={`badge ${
-                      row.status ? "bg-success" : "bg-danger"
-                    }`}
-                  >
-                    {row.status ? "Active" : "Inactive"}
-                  </span>
-                </td>
+                <td>{row.pitch_mm}</td>
+<td>
+  <span className={`badge ${row.is_active ? "bg-success" : "bg-danger"}`}>
+    {row.is_active ? "Active" : "Inactive"}
+  </span>
+</td>
+<td>
+  {row.created_at
+    ? new Date(row.created_at).toLocaleString()
+    : "-"}
+</td>
+
                 <td className="text-end">
                   <button
                     className="btn btn-outline-secondary btn-sm me-2"
@@ -622,34 +662,34 @@ return (
             </select>
           </div>
 
-          {[
-            { k: "line_code", l: "Line Code" },
-            { k: "line_name", l: "Line Name" },
-            { k: "product_type", l: "Product Type" },
-            { k: "line_type", l: "Line Type" },
-            { k: "pitch_or_index_time", l: "Pitch / Index Time (sec)" },
-          ].map(({ k, l }) => (
-            <div className="mb-3" key={k}>
-              <label className="form-label">{l}</label>
-              <input
-                className="form-control"
-                value={formData[k]}
-                onChange={(e) =>
-                  setFormData({ ...formData, [k]: e.target.value })
-                }
-              />
-            </div>
-          ))}
+ {[
+  { k: "line_code", l: "Line Code" },
+  { k: "line_name", l: "Line Name" },
+  { k: "pitch_mm", l: "Pitch (mm)" },
+].map(({ k, l }) => (
+  <div className="mb-3" key={k}>
+    <label className="form-label">{l}</label>
+    <input
+      className="form-control"
+      value={formData[k]}
+      onChange={(e) =>
+        setFormData({ ...formData, [k]: e.target.value })
+      }
+    />
+  </div>
+))}
+
 
           <div className="form-check mb-3">
-            <input
-              className="form-check-input"
-              type="checkbox"
-              checked={formData.status}
-              onChange={(e) =>
-                setFormData({ ...formData, status: e.target.checked })
-              }
-            />
+         <input
+  className="form-check-input"
+  type="checkbox"
+  checked={formData.is_active}
+  onChange={(e) =>
+    setFormData({ ...formData, is_active: e.target.checked })
+  }
+/>
+
             <label className="form-check-label">Active</label>
           </div>
 
@@ -685,16 +725,35 @@ return (
           <h5 className="mb-3">Line Details</h5>
 
           <div className="d-flex flex-column gap-2">
-            {Object.entries(viewData).map(([k, v]) => (
-              <div key={k} className="d-flex justify-content-between">
-                <strong className="text-muted">
-                  {k.replace(/_/g, " ")}
-                </strong>
-                <span>
-                  {k === "plant_id" ? getPlantName(v) : String(v)}
-                </span>
-              </div>
-            ))}
+          {Object.entries(viewData)
+  .filter(([k]) => k !== "line_id")
+  .map(([k, v]) => (
+    <div key={k} className="d-flex justify-content-between align-items-start">
+      
+      {/* ===== FIELD LABEL FIX ===== */}
+      <strong className="text-muted">
+        {k === "plant_id"
+          ? "Plant Name"
+          : k === "is_active"
+          ? "Status"
+          : k.replace(/_/g, " ")}
+      </strong>
+
+      {/* ===== FIELD VALUE FIX ===== */}
+      <span className="text-end">
+        {k === "plant_id" ? (
+          getPlantName(v)
+        ) : k === "is_active" ? (
+          <span className={`badge ${v ? "bg-success" : "bg-danger"}`}>
+            {v ? "Active" : "Inactive"}
+          </span>
+        ) : (
+          v ?? "-"
+        )}
+      </span>
+    </div>
+))}
+
           </div>
 
           <div className="text-end mt-3">

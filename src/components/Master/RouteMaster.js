@@ -1,3 +1,4 @@
+
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2, Plus, RotateCcw } from "lucide-react";
@@ -5,26 +6,31 @@ import axios from "axios";
 import API_BASE_URL from "../../config";
 
 const emptyForm = {
-  part_no: "",
-  part_name: "",
-  trace_type: "SERIAL",
+  model_id: "",
+  route_version: "",
   is_active: true,
 };
 
 /* ================= API ================= */
 
-const fetchParts = async () => {
-  const { data } = await axios.get(`${API_BASE_URL}/api/parts`);
+const fetchRoutes = async () => {
+  const { data } = await axios.get(`${API_BASE_URL}/api/routes`);
   return data;
 };
 
-const PartMaster = () => {
+const fetchModels = async () => {
+  const { data } = await axios.get(`${API_BASE_URL}/api/models`);
+  return data;
+};
+
+const RouteMaster = () => {
   const queryClient = useQueryClient();
 
-  const [filters, setFilters] = useState({
-    part_no: "",
-    part_name: "",
-  });
+ const [filters, setFilters] = useState({
+  route_version: "",
+  model_id: "",
+});
+
 
   const [formData, setFormData] = useState(emptyForm);
   const [isEditing, setIsEditing] = useState(false);
@@ -32,18 +38,23 @@ const PartMaster = () => {
 
   /* ================= FETCH ================= */
 
-  const { data: parts = [], isLoading } = useQuery({
-    queryKey: ["parts"],
-    queryFn: fetchParts,
+  const { data: routes = [], isLoading } = useQuery({
+    queryKey: ["routes"],
+    queryFn: fetchRoutes,
+  });
+
+  const { data: models = [] } = useQuery({
+    queryKey: ["models"],
+    queryFn: fetchModels,
   });
 
   /* ================= MUTATIONS ================= */
 
   const createMutation = useMutation({
     mutationFn: (newData) =>
-      axios.post(`${API_BASE_URL}/api/parts`, newData),
+      axios.post(`${API_BASE_URL}/api/routes`, newData),
     onSuccess: () => {
-      queryClient.invalidateQueries(["parts"]);
+      queryClient.invalidateQueries(["routes"]);
       setShowModal(false);
     },
     onError: (err) => {
@@ -54,35 +65,37 @@ const PartMaster = () => {
   const updateMutation = useMutation({
     mutationFn: (updatedData) =>
       axios.put(
-        `${API_BASE_URL}/api/parts/${updatedData.part_id}`,
+        `${API_BASE_URL}/api/routes/${updatedData.route_id}`,
         updatedData
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries(["parts"]);
+      queryClient.invalidateQueries(["routes"]);
       setShowModal(false);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) =>
-      axios.delete(`${API_BASE_URL}/api/parts/${id}`),
+      axios.delete(`${API_BASE_URL}/api/routes/${id}`),
     onSuccess: () =>
-      queryClient.invalidateQueries(["parts"]),
+      queryClient.invalidateQueries(["routes"]),
   });
 
   /* ================= FILTER ================= */
+const filteredData = useMemo(() => {
+  return routes.filter((row) => {
+    const versionMatch = filters.route_version
+      ? String(row.route_version).includes(filters.route_version)
+      : true;
 
-  const filteredData = useMemo(() => {
-    return parts.filter((row) =>
-      Object.entries(filters).every(([key, val]) =>
-        val
-          ? String(row[key] || "")
-              .toLowerCase()
-              .includes(val.toLowerCase())
-          : true
-      )
-    );
-  }, [parts, filters]);
+    const modelMatch = filters.model_id
+      ? row.model_id === filters.model_id
+      : true;
+
+    return versionMatch && modelMatch;
+  });
+}, [routes, filters]);
+
 
   /* ================= HANDLERS ================= */
 
@@ -99,20 +112,28 @@ const PartMaster = () => {
   };
 
   const handleDelete = (id) => {
-    if (!window.confirm("Delete this part?")) return;
+    if (!window.confirm("Delete this route?")) return;
     deleteMutation.mutate(id);
   };
 
   const handleSave = () => {
-    if (!formData.part_no || !formData.part_name) {
-      alert("Part code and Part Name are required");
+    if (!formData.model_id) {
+      alert("Model is required");
+      return;
+    }
+
+    if (!formData.route_version) {
+      alert("Route Version is required");
       return;
     }
 
     if (isEditing) {
       updateMutation.mutate(formData);
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate({
+        ...formData,
+        route_version: Number(formData.route_version),
+      });
     }
   };
 
@@ -132,26 +153,32 @@ const PartMaster = () => {
         }}
       >
         <div className="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
-          <h4 className="fw-bold mb-1">Part Master</h4>
+          <h4 className="fw-bold mb-1">Route Master</h4>
 
           <div className="d-flex gap-2 flex-wrap align-items-center">
-            <input
-              className="form-control"
-              placeholder="Part code"
-              style={{ width: 150 }}
-              value={filters.part_no}
-              onChange={(e) =>
-                setFilters({ ...filters, part_no: e.target.value })
-              }
-            />
+            <select
+  className="form-control"
+  style={{ width: 180 }}
+  value={filters.model_id}
+  onChange={(e) =>
+    setFilters({ ...filters, model_id: e.target.value })
+  }
+>
+  <option value="">All Models</option>
+  {models.map((model) => (
+    <option key={model.model_id} value={model.model_id}>
+      {model.model_name}
+    </option>
+  ))}
+</select>
 
             <input
               className="form-control"
-              placeholder="Part Name"
-              style={{ width: 180 }}
-              value={filters.part_name}
+              placeholder="Route Version"
+              style={{ width: 160 }}
+              value={filters.route_version}
               onChange={(e) =>
-                setFilters({ ...filters, part_name: e.target.value })
+                setFilters({ route_version: e.target.value })
               }
             />
 
@@ -159,7 +186,7 @@ const PartMaster = () => {
               className="btn btn-sm"
               style={{ background: "#d3e7f3" }}
               onClick={() =>
-                setFilters({ part_no: "", part_name: "" })
+                setFilters({ route_version: "", model_id: "" })
               }
             >
               <RotateCcw size={14} />
@@ -170,7 +197,7 @@ const PartMaster = () => {
               onClick={handleAdd}
             >
               <Plus size={14} />
-              Add Part
+              Add Route
             </button>
           </div>
         </div>
@@ -182,9 +209,8 @@ const PartMaster = () => {
           <thead>
             <tr className="text-muted">
               <th>Sr</th>
-              <th>Part Code</th>
-              <th>Part Name</th>
-              <th>Trace Type</th>
+              <th>Model</th>
+              <th>Version</th>
               <th>Status</th>
               <th>Created</th>
               <th className="text-end">Actions</th>
@@ -193,7 +219,7 @@ const PartMaster = () => {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan="7" className="text-center py-4">
+                <td colSpan="6" className="text-center py-4">
                   Loading...
                 </td>
               </tr>
@@ -201,24 +227,15 @@ const PartMaster = () => {
 
             {!isLoading &&
               filteredData.map((row, i) => (
-                <tr key={row.part_id}>
+                <tr key={row.route_id}>
                   <td>{i + 1}</td>
-                  <td>{row.part_no}</td>
-                  <td>{row.part_name}</td>
                   <td>
-  <span
-    className={`badge ${
-      row.trace_type === "SERIAL"
-        ? "bg-primary"
-        : row.trace_type === "BATCH"
-        ? "bg-warning text-dark"
-        : "bg-secondary"
-    }`}
-  >
-    {row.trace_type}
-  </span>
+  {
+    models.find(m => m.model_id === row.model_id)?.model_name || "-"
+  }
 </td>
 
+                  <td>{row.route_version}</td>
                   <td>
                     {row.is_active ? (
                       <span className="badge bg-success">
@@ -243,7 +260,7 @@ const PartMaster = () => {
                     <button
                       className="btn btn-outline-danger btn-sm"
                       onClick={() =>
-                        handleDelete(row.part_id)
+                        handleDelete(row.route_id)
                       }
                     >
                       <Trash2 size={14} />
@@ -254,8 +271,8 @@ const PartMaster = () => {
 
             {!isLoading && filteredData.length === 0 && (
               <tr>
-                <td colSpan="7" className="text-center text-muted py-4">
-                  No parts found
+                <td colSpan="6" className="text-center text-muted py-4">
+                  No routes found
                 </td>
               </tr>
             )}
@@ -281,53 +298,49 @@ const PartMaster = () => {
             style={{ width: 450 }}
           >
             <h5 className="mb-3">
-              {isEditing ? "Edit Part" : "Add Part"}
+              {isEditing ? "Edit Route" : "Add Route"}
             </h5>
 
+            {/* MODEL DROPDOWN */}
             <div className="mb-2">
-              <label className="form-label">Part Code</label>
-              <input
+              <label className="form-label">Model</label>
+              <select
                 className="form-control"
-                value={formData.part_no}
+                value={formData.model_id}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    part_no: e.target.value,
+                    model_id: e.target.value,
                   })
                 }
                 disabled={isEditing}
-              />
-            </div>
-
-            <div className="mb-2">
-              <label className="form-label">Part Name</label>
-              <input
-                className="form-control"
-                value={formData.part_name}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    part_name: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div className="mb-2">
-              <label className="form-label">Trace Type</label>
-              <select
-                className="form-control"
-                value={formData.trace_type}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    trace_type: e.target.value,
-                  })
-                }
               >
-                <option value="SERIAL">SERIAL</option>
-                <option value="BATCH">BATCH</option>
+                <option value="">Select Model</option>
+                {models.map((model) => (
+                  <option
+                    key={model.model_id}
+                    value={model.model_id}
+                  >
+                    {model.model_name || model.model_id}
+                  </option>
+                ))}
               </select>
+            </div>
+
+            {/* VERSION */}
+            <div className="mb-2">
+              <label className="form-label">Route Version</label>
+              <input
+                type="number"
+                className="form-control"
+                value={formData.route_version}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    route_version: e.target.value,
+                  })
+                }
+              />
             </div>
 
             <div className="form-check mt-2">
@@ -368,5 +381,4 @@ const PartMaster = () => {
   );
 };
 
-export default PartMaster;
-
+export default RouteMaster;
