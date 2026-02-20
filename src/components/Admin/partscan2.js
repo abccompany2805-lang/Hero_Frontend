@@ -1,13 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import API_BASE_URL from "../../config";
 import { useParams } from "react-router-dom";
-
-
-
+import mqtt from "mqtt";
 
 const STORAGE_KEY = "skd_part_scan_qty";
-
-
 
 const SKDPartScanning = () => {
 
@@ -30,10 +26,15 @@ const [isInterlocked, setIsInterlocked] = useState(false);
 const [prePitchValue, setPrePitchValue] = useState(null); // 0 or 1
 /* ================= RESULT STATE ================= */
 const [finalResult, setFinalResult] = useState(null); // null | PASS | FAIL
+const STATIC_PREPITCH_TOPIC = "PREPITCH";
+
 
 
 const isInvalidStage = !stageNumber || isNaN(stageNumber);
 const [mqttSignals, setMqttSignals] = useState([]);
+
+
+const mqttClientRef = useRef(null);
 
 
 
@@ -87,33 +88,39 @@ const partScanSignal = mqttSignals.find(
   s => s.logical_name.toLowerCase().includes("part")
 );
 
-const prepitchSignal = mqttSignals.find(
-  s => s.logical_name.toLowerCase().includes("prepitch")
-);
 
 
-// useEffect(() => {
-//   if (!vinSignal?.topic) return;
 
-//   const client = mqtt.connect("ws://192.168.1.11:9001");
+//   if (!vinSignal?.topic && !prepitchSignal?.topic) return;
+
+//   const client = mqtt.connect("ws://localhost:9001");
+
+//   mqttClientRef.current = client;
 
 //   client.on("connect", () => {
 //     console.log("MQTT Connected");
 
-//     client.subscribe(vinSignal.topic, (err) => {
-//       if (!err) {
-//         console.log("Subscribed to VIN topic:", vinSignal.topic);
-//       }
-//     });
+//     if (vinSignal?.topic) {
+//       client.subscribe(vinSignal.topic);
+//       console.log("Subscribed VIN:", vinSignal.topic);
+//     }
+
+//     if (prepitchSignal?.topic) {
+//       client.subscribe(prepitchSignal.topic);
+//       console.log("Subscribed PrePitch:", prepitchSignal.topic);
+//     }
 //   });
 
 //   client.on("message", (topic, message) => {
-//     if (topic === vinSignal.topic) {
-//       const incomingVin = message.toString().trim();
+//     const value = message.toString().trim();
 
-//       if (incomingVin) {
-//         handleNewVin(incomingVin);
-//       }
+//     if (topic === vinSignal?.topic && value) {
+//       handleNewVin(value);
+//     }
+
+//     if (topic === prepitchSignal?.topic) {
+//       const prepitchVal = Number(value || 0);
+//       setPrePitchValue(prepitchVal);
 //     }
 //   });
 
@@ -125,80 +132,145 @@ const prepitchSignal = mqttSignals.find(
 //     client.end();
 //   };
 
-// }, [vinSignal?.topic]);
+// }, [vinSignal?.topic, prepitchSignal?.topic]);
 
 
 // useEffect(() => {
-//   if (!prepitchSignal?.topic) return;
+//   if (!vinSignal?.topic && !prepitchSignal?.topic) return;
 
-//   const client = mqtt.connect("ws://192.168.1.11:9001");
+//   let reconnectTimeout = null;
 
-//   client.on("connect", () => {
-//     client.subscribe(prepitchSignal.topic);
-//   });
+//   const connectMqtt = () => {
+//     console.log("Connecting MQTT...");
 
-//   client.on("message", (topic, message) => {
-//     if (topic === prepitchSignal.topic) {
-//       const value = Number(message.toString() || 0);
-//       setPrePitchValue(value);
-//     }
-//   });
+//     const client = mqtt.connect("ws://192.168.1.15:9001", {
+//       reconnectPeriod: 3000,   // 🔥 auto reconnect every 3 sec
+//       connectTimeout: 4000,
+//       clean: true,
+//       keepalive: 60,
+//     });
 
-//   return () => {
-//     client.end();
+//     mqttClientRef.current = client;
+
+//     client.on("connect", () => {
+//       console.log("✅ MQTT Connected");
+
+//       if (vinSignal?.topic) {
+//         client.subscribe(vinSignal.topic, { qos: 0 });
+//         console.log("Subscribed VIN:", vinSignal.topic);
+//       }
+
+//       if (prepitchSignal?.topic) {
+//         client.subscribe(prepitchSignal.topic, { qos: 0 });
+//         console.log("Subscribed PrePitch:", prepitchSignal.topic);
+//       }
+//     });
+
+//     client.on("message", (topic, message) => {
+//       const value = message.toString().trim();
+
+//       if (topic === vinSignal?.topic && value) {
+//         handleNewVin(value);
+//       }
+
+//       if (topic === prepitchSignal?.topic) {
+//         setPrePitchValue(Number(value || 0));
+//       }
+//     });
+
+//     client.on("reconnect", () => {
+//       console.log("🔄 MQTT Reconnecting...");
+//     });
+
+//     client.on("close", () => {
+//       console.log("⚠️ MQTT Connection Closed");
+//     });
+
+//     client.on("offline", () => {
+//       console.log("📴 MQTT Offline");
+//     });
+
+//     client.on("error", (err) => {
+//       console.error("❌ MQTT Error:", err.message);
+//       client.end();
+//     });
+
+//     return client;
 //   };
 
-// }, [prepitchSignal?.topic]);
+//   const client = connectMqtt();
+
+//   return () => {
+//     console.log("Cleaning MQTT...");
+//     if (client) {
+//       client.end(true);
+//     }
+//     if (reconnectTimeout) {
+//       clearTimeout(reconnectTimeout);
+//     }
+//   };
+
+// }, [vinSignal?.topic, prepitchSignal?.topic]);
 
 
-
-
-//vin against api.
 useEffect(() => {
   if (!vinSignal?.topic) return;
 
-  const interval = setInterval(async () => {
-    try {
-      // ================= VIN FETCH (UNCHANGED) =================
-      if (vinSignal?.topic) {
-        const vinRes = await fetch(`${API_BASE_URL}/api/mqtt/listen`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic: vinSignal.topic }),
-        });
+  console.log("🚀 useEffect triggered");
+  console.log("VIN Topic:", vinSignal?.topic);
 
-        const vinJson = await vinRes.json();
+  const client = mqtt.connect("ws://localhost:9001", {
+    reconnectPeriod: 3000,
+    connectTimeout: 4000,
+    clean: true,
+    keepalive: 60,
+  });
 
-        if (vinJson.success && vinJson.data?.trim()) {
-          handleNewVin(vinJson.data.trim());
-        }
-      }
+  mqttClientRef.current = client;
 
-      // ================= PREPITCH FETCH (UPDATED ONLY THIS) =================
-      const PREPITCH_TOPIC = "PREPITCH"; // 🔥 static topic
+  client.on("connect", () => {
+    console.log("✅ MQTT Connected");
 
-      const preRes = await fetch(`${API_BASE_URL}/api/mqtt/listen`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: PREPITCH_TOPIC }),
-      });
+    // VIN topic from API
+    client.subscribe(vinSignal.topic, { qos: 0 });
+    console.log("📡 Subscribed VIN:", vinSignal.topic);
 
-      const preJson = await preRes.json();
+    // Static PrePitch
+    client.subscribe(STATIC_PREPITCH_TOPIC, { qos: 0 });
+    console.log("📡 Subscribed Static PrePitch:", STATIC_PREPITCH_TOPIC);
+  });
 
-      if (preJson.success) {
-        // 🔥 if null / undefined → default 0
-        const value = Number(preJson.data ?? 0);
-        setPrePitchValue(value);
-      }
+  client.on("message", (topic, message) => {
+    const value = message.toString().trim();
 
-    } catch (err) {
-      console.error("MQTT polling error:", err.message);
+    if (topic === vinSignal.topic && value) {
+      handleNewVin(value);
     }
-  }, 1000); // 🔥 kept exactly same
 
-  return () => clearInterval(interval);
+    if (topic === STATIC_PREPITCH_TOPIC) {
+      setPrePitchValue(Number(value || 0));
+    }
+  });
+
+  client.on("reconnect", () => {
+    console.log("🔄 MQTT Reconnecting...");
+  });
+
+  client.on("offline", () => {
+    console.log("📴 MQTT Offline");
+  });
+
+  client.on("error", (err) => {
+    console.error("❌ MQTT Error:", err.message);
+  });
+
+  return () => {
+    console.log("🧹 Cleaning MQTT Connection...");
+    client.end(true);
+  };
 
 }, [vinSignal?.topic]);
+
 
 
 useEffect(() => {
@@ -276,24 +348,23 @@ if (vin === trimmedVin) return;
 
 
 
-const publishPartScanStatus = async (status) => {
+const publishPartScanStatus = (status) => {
   if (!partScanSignal?.topic) return;
+  if (!mqttClientRef.current) return;
 
   try {
-    await fetch(`${API_BASE_URL}/api/mqtt/publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        topic: partScanSignal.topic, // topic from API where logical_name includes part_scan
-        data: status, // 🔥 PASS or FAIL
-      }),
-    });
+    mqttClientRef.current.publish(
+      partScanSignal.topic,
+      status,
+      { qos: 0, retain: false }
+    );
 
-    console.log("Published Part Scan Status:", status);
+    console.log("MQTT Published:", status);
   } catch (err) {
-    console.error("MQTT publish error", err);
+    console.error("MQTT Publish Error:", err);
   }
 };
+
 
 
 const fetchVinDataFromApi = async (incomingVin) => {
@@ -331,34 +402,6 @@ const fetchVinDataFromApi = async (incomingVin) => {
 
 
 
-  /* ================= FETCH VIN ================= */
-  const fetchVinData = async () => {
-    if (!vin) return;
-
-    try {
-      setLoading(true);
-      const res = await fetch(
-        `${API_BASE_URL}/api/vin/get-model-by-vin`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ vin_no: vin }),
-        }
-      );
-
-      const json = await res.json();
-      if (json.success) {
-        setRouteData(json.data);
-        setScanQtyMap({});
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch (err) {
-      console.error("VIN API error", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
 
   /* ================= PARTS ================= */
 const parts =
@@ -384,6 +427,7 @@ const parts =
   /* ================= SCAN LOGIC ================= */
 const handleScan = () => {
   if (!scannedValue || isInterlocked) return;
+  if (!routeData?.partRequirements) return;
 
   const scannedSku = scannedValue.replace(/[\r\n]/g, "").trim();
 
@@ -392,10 +436,33 @@ const handleScan = () => {
     return;
   }
 
-  // 🔥 DIRECT MATCH WITHOUT REGEX
-  const matchedPart = parts.find(
-    (p) => p.sku.toLowerCase() === scannedSku.toLowerCase()
-  );
+  let matchedPart = null;
+
+  for (const part of routeData.partRequirements) {
+    if (!part.regex_pattern) continue;
+
+    // 🔥 Replace (PART_CODE) with actual part_no
+    const finalPattern = part.regex_pattern.replace(
+      "PART_CODE",
+      part.part_no
+    );
+
+    const regex = new RegExp(finalPattern);
+
+    // 1️⃣ Regex match
+    if (!regex.test(scannedSku)) continue;
+
+    // 2️⃣ Length validation
+    if (
+      (part.min_len && scannedSku.length < part.min_len) ||
+      (part.max_len && scannedSku.length > part.max_len)
+    ) {
+      continue;
+    }
+
+    matchedPart = part;
+    break;
+  }
 
   if (!matchedPart) {
     setWrongSku(true);
@@ -404,18 +471,22 @@ const handleScan = () => {
   }
 
   setWrongSku(false);
-  setLastScannedSku(matchedPart.sku);
+  setLastScannedSku(matchedPart.part_no);
 
   setScanQtyMap((prev) => {
-    const current = prev[matchedPart.sku] || 0;
+    const current = prev[matchedPart.part_no] || 0;
 
-    if (current >= matchedPart.qty) return prev; // already completed
+    if (current >= matchedPart.qty_required) return prev;
 
-    return { ...prev, [matchedPart.sku]: current + 1 };
+    return {
+      ...prev,
+      [matchedPart.part_no]: current + 1,
+    };
   });
 
   setScannedValue("");
 };
+
 
   /* ================= ROW STYLE ================= */
   const getRowStyle = (row) => {

@@ -7,8 +7,11 @@ import API_BASE_URL from "../../config";
 const RECIPE_API = `${API_BASE_URL}/api/recipe-process`;
 const TOOL_API = `${API_BASE_URL}/api/tools`;
 const PROGRAM_API = `${API_BASE_URL}/api/tool-programs`;
+const RECIPE_MASTER_API = `${API_BASE_URL}/api/recipes`;
+
 
 const emptyForm = {
+   recipe_id: "",
   tool_id: "",
   program_id: "",
   set_torque: "",
@@ -52,6 +55,14 @@ const RecipeProcessMaster = () => {
     },
   });
 
+  const { data: recipeMasters = [] } = useQuery({
+  queryKey: ["recipeMasters"],
+  queryFn: async () => {
+    const res = await axios.get(`${API_BASE_URL}/api/recipes`);
+    return res.data || [];
+  },
+});
+
   const { data: programs = [] } = useQuery({
     queryKey: ["tool-programs"],
     queryFn: async () => {
@@ -82,6 +93,12 @@ const filteredRecipes = useMemo(() => {
     if (!program) return id;
     return `${program.program_no} - ${program.program_name}`;
   };
+
+  const getRecipeName = (id) => {
+  const recipe = recipeMasters.find((r) => r.recipe_id === id);
+  return recipe ? recipe.recipe_name : id;
+};
+
 
   /* ================= MUTATIONS ================= */
 
@@ -125,6 +142,7 @@ const filteredRecipes = useMemo(() => {
 
   const handleSave = () => {
     const payload = {
+      recipe_id: formData.recipe_id, // 🔥 ADD THIS
       tool_id: formData.tool_id,
       program_id: formData.program_id,
       set_torque: formData.set_torque || null,
@@ -204,6 +222,7 @@ const filteredRecipes = useMemo(() => {
           <thead>
             <tr className="text-muted">
               <th>Sr</th>
+              <th>Recipe</th>
               <th>Tool</th>
               <th>Program</th>
               <th>Torque</th>
@@ -217,6 +236,8 @@ const filteredRecipes = useMemo(() => {
             {filteredRecipes.map((row, i) => (
               <tr key={row.recipe_code}>
                 <td>{i + 1}</td>
+                <td>{getRecipeName(row.recipe_id)}</td>
+
                 <td>{getToolCode(row.tool_id)}</td>
                 <td>{getProgramName(row.program_id)}</td>
                 <td>{row.set_torque}</td>
@@ -276,6 +297,20 @@ const filteredRecipes = useMemo(() => {
             <h5 className="mb-3">
               {isEditing ? "Edit Recipe" : "Add Recipe"}
             </h5>
+            <select
+  className="form-control mb-2"
+  value={formData.recipe_id}
+  onChange={(e) =>
+    setFormData({ ...formData, recipe_id: e.target.value })
+  }
+>
+  <option value="">Select Recipe</option>
+  {recipeMasters.map((r) => (
+    <option key={r.recipe_id} value={r.recipe_id}>
+      {r.recipe_name}
+    </option>
+  ))}
+</select>
 
             <select
               className="form-control mb-2"
@@ -367,6 +402,10 @@ const filteredRecipes = useMemo(() => {
       <h5 className="mb-3">Recipe Details</h5>
 
       <div className="d-flex flex-column gap-2">
+      <div className="d-flex justify-content-between">
+  <strong className="text-muted">Recipe</strong>
+  <span>{getRecipeName(viewData.recipe_id)}</span>
+</div>
 
         <div className="d-flex justify-content-between">
           <strong className="text-muted">Tool</strong>
