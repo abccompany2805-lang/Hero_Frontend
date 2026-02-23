@@ -1,612 +1,306 @@
-
-
-// Code with dummy data 
-// import React, { useEffect, useState } from "react";
-
-// const DCToolHMI = () => {
-//   const [now, setNow] = useState(new Date());
-
-//   // Dummy states (later from DB / MQTT)
-//   const [operationMode, setOperationMode] = useState("ACTIVE"); // ACTIVE | MANUAL
-//   const [lineStatus, setLineStatus] = useState("INTERLOCKED"); // INTERLOCKED | BYPASSED
-
-//   /* ===== REAL-TIME CLOCK ===== */
-//   useEffect(() => {
-//     const timer = setInterval(() => setNow(new Date()), 1000);
-//     return () => clearInterval(timer);
-//   }, []);
-
-//   /* ===== DUMMY MODE TOGGLE ===== */
-//   useEffect(() => {
-//     const modeTimer = setInterval(() => {
-//       setOperationMode((prev) => (prev === "AUTO" ? "MANUAL" : "AUTO"));
-//     }, 5000);
-
-//     return () => clearInterval(modeTimer);
-//   }, []);
-
-//   /* ===== DUMMY LINE STATUS TOGGLE ===== */
-//   useEffect(() => {
-//     const statusTimer = setInterval(() => {
-//       setLineStatus((prev) =>
-//         prev === "INTERLOCKED" ? "BYPASSED" : "INTERLOCKED",
-//       );
-//     }, 6000);
-
-//     return () => clearInterval(statusTimer);
-//   }, []);
-
-//   const formatDate = now.toLocaleDateString("en-GB");
-//   const formatTime = now.toLocaleTimeString("en-US", {
-//     hour: "2-digit",
-//     minute: "2-digit",
-//     hour12: true,
-//   });
-
-//   return (
-//     <div style={styles.root}>
-//       {/* ================= HEADER ================= */}
-//       <div style={styles.header}>
-//         {/* LEFT LOGO */}
-//         <img src="/hero-logo.png" alt="Hero Logo" style={styles.heroLogo} />
-
-//         {/* CENTER TITLE */}
-//         <div style={styles.headerPill}>
-//           <div style={styles.headerTitle}>LEAK TEST STAGE</div>
-//         </div>
-
-//         {/* RIGHT LOGO */}
-//         <img
-//           src="/operatex-logo.jpg"
-//           alt="OperateX Logo"
-//           style={styles.operatexLogo}
-//         />
-//       </div>
-
-//       {/* ================= MODEL ROW ================= */}
-//       <div style={styles.modelRow}>
-//         <div style={styles.modelText}>
-//           Model:{" "}
-//           <span style={styles.modelValue}>
-//             FUEL SYSTEM LEAK TEST 
-//           </span>
-//         </div>
-//         <div style={styles.mqtt}>MQTT Connected</div>
-//       </div>
-
-//       {/* ================= LINE STATUS ================= */}
-//       <div style={styles.lineStatusRow}>
-//         {/* LEFT */}
-//         <div style={styles.lineStatusLeft}>
-//           <span style={styles.lineStatusTitle}>LINE STATUS :</span>
-//           <span
-//             style={{
-//               ...styles.lineStatusValue,
-//               color: lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000df",
-//               textShadow:
-//                 lineStatus === "INTERLOCKED"
-//                   ? "0 0 10px #00ff00"
-//                   : "0 0 10px #ff8000df",
-//             }}
-//           >
-//             {lineStatus}
-//           </span>
-//         </div>
-
-//         {/* RIGHT */}
-//         <div style={styles.lineStatusRight}>
-//           <span
-//             style={{
-//               ...styles.lineActive,
-//               opacity: operationMode === "AUTO" ? 1 : 0.3,
-//               textShadow:
-//                 operationMode === "AUTO" ? "0 0 8px #00ff00" : "none",
-//             }}
-//           >
-//             AUTO
-//           </span>
-
-//           <span style={styles.lineSeparator}>|</span>
-
-//           <span
-//             style={{
-//               ...styles.lineManual,
-//               opacity: operationMode === "MANUAL" ? 1 : 0.3,
-//               textShadow:
-//                 operationMode === "MANUAL" ? "0 0 8px #ffd000" : "none",
-//             }}
-//           >
-//             MANUAL
-//           </span>
-//         </div>
-//       </div>
-
-//       {/* ================= BODY ================= */}
-//       <div style={styles.body}>
-//         {/* LEFT PANEL */}
-//         <div style={styles.leftPanel}>
-//           <div style={styles.circleRow}>
-//             <div style={styles.circleOuter}>
-//               <div style={styles.circleInner}>
-//                 <div style={styles.circleValue}>10</div>
-//               </div>
-//               <div style={styles.circleLabel}>
-//                 Stage
-//                 <br />
-//                 Number
-//               </div>
-//             </div>
-
-//             <div style={styles.circleOuter}>
-//               <div style={styles.circleInner}>
-//                 <div style={styles.circleValue}>LH</div>
-//               </div>
-//               <div style={styles.circleLabel}>Side</div>
-//             </div>
-//           </div>
-
-//           <div style={styles.dateTimeBlock}>
-//             <div style={styles.dateTimeRow}>
-//               <div style={styles.dateTimeLabel}>DATE</div>
-//               <div style={styles.dateTimeValue}>{formatDate}</div>
-//             </div>
-
-//             <div style={styles.dateTimeRow}>
-//               <div style={styles.dateTimeLabel}>TIME</div>
-//               <div style={styles.dateTimeValue}>{formatTime}</div>
-//             </div>
-//           </div>
-//         </div>
-
-//         {/* TORQUE LIMIT */}
-//         <div style={styles.torqueLimits}>
-//           <div style={styles.torqueBox}>
-//             <div style={styles.torqueValue}>4.5</div>
-//             <div style={styles.torqueLabel}>
-//               MINIMUM
-//               <br />
-//               LEAK VALUE
-//             </div>
-//           </div>
-
-//           <div style={styles.torqueDivider} />
-
-//           <div style={styles.torqueBox}>
-//             <div style={styles.torqueValue}>5.5</div>
-//             <div style={styles.torqueLabel}>
-//               MAXIMUM
-//               <br />
-//               LEAK VALUE
-//             </div>
-//           </div>
-//         </div>
-
-//         {/* RIGHT PANEL */}
-//         <div style={styles.rightPanel}>
-//           <div style={styles.vinBox}>VIN: MD2B68BX2TWL20741</div>
-
-//           <div style={styles.skuBlock}>
-//             <div style={styles.skuRow}>
-//               <div style={styles.skuText}>
-//                 SKU: <span style={styles.yellow}>00DH71D7</span>
-//               </div>
-//               <div style={styles.resultBtn}>RESULT</div>
-//             </div>
-
-           
-//           </div>
-
-//           <div style={styles.torqueDisplay}>
-//             <div style={styles.torqueIndicator}></div>
-//           </div>
-
-//           <div style={styles.torqueText}>
-//             LEAK
-//             <br />
-//             VALUE
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// /* ================= STYLES ================= */
-// const styles = {
-//   root: {
-//     width: "100%",
-//     height: "95vh",
-//     background: "#000",
-//     color: "#fff",
-//     fontFamily: "Segoe UI, Arial, sans-serif",
-
-//     /* FULL BLUE BORDER – ALL 4 SIDES */
-//     border: "6px solid #00c3ff",
-//     boxSizing: "border-box",
-
-//     /* REMOVE GAP */
-//     margin: 0,
-//     marginTop: 47,
-
-//     /* OPTIONAL: industrial double-line look */
-//     outline: "2px solid #0099cc",
-//     outlineOffset: -8,
-//   },
-
-//   header: {
-//     height: 80,
-//     display: "flex",
-//     alignItems: "center",
-//     justifyContent: "center",
-//     position: "relative", // ⬅️ IMPORTANT
-//   },
-
-//   heroLogo: {
-//     position: "absolute",
-//     left: 23,
-//     height: 55,
-//     objectFit: "contain",
-//   },
-
-//   operatexLogo: {
-//     position: "absolute",
-//     right: 23,
-//     height: 55,
-  
-//     objectFit: "contain",
-//   },
-
-//   headerPill: {
-//     width: "50%",
-//     background: "#12bdf2",
-//     borderRadius: "0 0 22px 22px",
-//     padding: "12px 0",
-//     textAlign: "center",
-//   },
-
-//   headerTitle: {
-//     fontSize: 35,
-//     fontWeight: "bold",
-//     color: "#000",
-//   },
-
-//   modelRow: {
-//     display: "flex",
-//     padding: "8px 20px",
-//     borderBottom: "5px solid #222",
-//     marginTop: 20,
-//   },
-
-//   modelText: {
-//     flex: 1,
-//     color: "#ffd000",
-//     fontSize: 35,
-//   },
-
-//   modelValue: { fontWeight: "bold" },
-
-//   mqtt: {
-//     color: "#00ff00",
-//     fontSize: 28,
-//     fontWeight: "bold",
-//   },
-
-//   lineStatusRow: {
-//     display: "flex",
-//     justifyContent: "space-between",
-//     alignItems: "center",
-//     padding: "10px 20px",
-//     background: "#111",
-//     borderBottom: "2px solid #222",
-//   },
-
-//   lineStatusLeft: {
-//     display: "flex",
-//     alignItems: "center",
-//   },
-
-//   lineStatusTitle: {
-//     fontSize: 32,
-//     color: "#00c3ff",
-//     marginRight: 10,
-//     fontWeight: "bold",
-//   },
-
-//   lineStatusValue: {
-//     fontSize: 32,
-//     fontWeight: "bold",
-//   },
-
-//   lineStatusRight: {
-//     display: "flex",
-//     alignItems: "center",
-//     fontSize: 28,
-//     fontWeight: "bold",
-//   },
-
-//   lineActive: { color: "#00ff00" },
-//   lineManual: { color: "#ffd000" },
-//   lineSeparator: { margin: "0 10px", color: "#888" },
-
-//   body: {
-//     display: "flex",
-//     padding: "20px 0",
-//     gap: 20,
-//   },
-
-//   leftPanel: {
-//     width: 500,
-//     border: "4px solid #b400ff",
-//     borderRadius: 16,
-//     padding: 16,
-//     height: 500,
-//   },
-
-//   circleRow: {
-//     display: "flex",
-//     justifyContent: "center", // ⬅️ centers both circles together
-//     alignItems: "flex-start",
-//     gap: 80,
-//     marginTop: 20, // ⬅️ space between the two circles
-//   },
-
-//   circleOuter: { textAlign: "center" },
-
-//   circleInner: {
-//     width: 130,
-//     height: 130,
-//     borderRadius: "60%",
-//     border: "4px solid #00ff00",
-//     outline: "4px solid #b400ff",
-//     outlineOffset: 5,
-//     display: "flex",
-//     justifyContent: "center",
-//     alignItems: "center",
-//   },
-
-//   circleValue: {
-//     fontSize: 46,
-//     color: "#ffd000",
-//     fontWeight: "bold",
-//   },
-
-//   circleLabel: {
-//     marginTop: 12,
-//     fontSize: 23,
-//     fontWeight: "bold",
-//   },
-
-//   dateTimeBlock: {
-//     marginTop: 100,
-//     display: "flex",
-//     flexDirection: "column",
-//     gap: 16,
-//   },
-
-//   dateTimeRow: {
-//     display: "flex",
-//     gap: 30,
-//     alignItems: "center",
-//   },
-
-//   dateTimeLabel: {
-//     background: "#fff",
-//     color: "#000",
-//     padding: "6px 14px",
-//     borderRadius: 6,
-//     fontWeight: "bold",
-//     fontSize: 20,
-//   },
-
-//   dateTimeValue: {
-//     fontSize: 34,
-//     fontWeight: "bold",
-//   },
-
-//   torqueLimits: {
-//     width: 180,
-//     display: "flex",
-//     flexDirection: "column",
-//     alignItems: "center",
-//     justifyContent: "center",
-//   },
-
-//   torqueBox: { textAlign: "center" },
-
-//   torqueValue: {
-//     fontSize: 60,
-//     color: "#ffd000",
-//     fontWeight: "bold",
-//   },
-
-//   torqueLabel: { fontSize: 16 },
-
-//   torqueDivider: {
-//     height: 2,
-//     width: "80%",
-//     background: "#b400ff",
-//     margin: "20px 0",
-//   },
-
-//   rightPanel: {
-//     flex: 1,
-//     border: "4px solid #00c3ff",
-//     padding: 10,
-//     borderRadius: 16,
-//   },
-
-//   vinBox: {
-//     background: "#fff",
-//     color: "#000",
-//     fontSize: 40,
-//     fontWeight: "bold",
-//     padding: 10,
-//     borderRadius: 20,
-//     marginBottom: 15,
-//   },
-
-//   skuBlock: {
-//     display: "flex",
-//     flexDirection: "column",
-//     gap: 10,
-//   },
-
-//   skuRow: {
-//     display: "flex",
-//     gap: 25,
-//     fontSize: 40,
-//   },
-
-//   skuText: { color: "#fff" },
-//   yellow: { color: "#ffd000", fontWeight: "bold" },
-
-//   resultBtn: {
-//     background: "#fff",
-//     color: "#000",
-//     padding: "6px 18px",
-//     borderRadius: 20,
-
-//     marginTop: 10,
-//     marginLeft: 250,
-//   },
-
-//   angleRow: {
-//     fontSize: 40,
-//   },
-
-//   torqueDisplay: {
-//     height: 150,
-//     width: 420,
-//     border: "4px solid #00ff00",
-//     borderRadius: 20,
-//     marginTop: 14,
-//     display: "flex",
-//     alignItems: "center",
-//     padding: 10,
-//   },
-
-//   torqueIndicator: {
-//     width: 20,
-//     height: 12,
-//     background: "#00ff00",
-//   },
-
-//   torqueText: {
-//     color: "#ffd000",
-//     fontSize: 20,
-//     textAlign: "right",
-//     width: "100%",
-//     paddingRight: 230,
-//     marginTop: -70,
-//   },
-// };
-
-// export default DCToolHMI;
-
-
-
-
-
-
-// Code with api integrated
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { useParams } from "react-router-dom";
 import mqtt from "mqtt";
+
+const API_URL = "http://192.168.1.15:5003/api/vin/get-model-by-vin";
+const MQTT_SIGNAL_API = "http://192.168.1.15:5003/api/mqtt-signal/by-stage-no";
 
 const LeakTest = () => {
   const [now, setNow] = useState(new Date());
 
-  /* ================= OPERATION STATES ================= */
-  const [operationMode, setOperationMode] = useState("AUTO"); // AUTO | MANUAL
-  const [lineStatus, setLineStatus] = useState("INTERLOCKED"); // INTERLOCKED | BYPASSED
+  /* ================= STAGE ================= */
+  const { stageNo } = useParams();
+  const stageNumber = parseInt(stageNo, 10);
+  const isInvalidStage = isNaN(stageNumber);
+  const torqueTopic = `ST${stageNumber}_Torque`;
+  const angleTopic = `ST${stageNumber}_Angle`;
+  const resultTopic = `ST${stageNumber}_Result`;
+  const prePitchTopic = "PrePitch";
+  const leakTopic = `ST${stageNumber}_Leak`;
 
-  /* ================= JOB DATA (FROM API) ================= */
-  const [jobData, setJobData] = useState({
-    vin: "",
-    sku: "",
-    model: "",
-    stageNo: "",
-    side: "",
-    minLeak: 0,
-    maxLeak: 0,
-  });
+  /* ================= SYSTEM STATES ================= */
+  const [operationMode, setOperationMode] = useState("AUTO");
+  const [lineStatus, setLineStatus] = useState("INTERLOCKED");
 
-  /* ================= LIVE DATA (FROM MQTT) ================= */
-  const [leakValue, setLeakValue] = useState(null);
-  const [result, setResult] = useState(null); // OK | NOT_OK | null
+  /* ================= API DATA STATES ================= */
+  const [vinInput, setVinInput] = useState("");
+  const [modelName, setModelName] = useState("-");
+  const [modelSku, setModelSku] = useState("-");
+  const [minLeak, setMinLeak] = useState("-");
+  const [maxLeak, setMaxLeak] = useState("-");
+  const [showResult, setShowResult] = useState(false);
+  const [showLeakValue, setShowLeakValue] = useState(false);
 
-  const lastPublishedResult = useRef(null);
+  const [liveLeak, setLiveLeak] = useState(0);
+  const [finalStatus, setFinalStatus] = useState(null);
+  const [stageName, setStageName] = useState("-");
   const mqttClientRef = useRef(null);
+  const [prePitch, setPrePitch] = useState(0);
+  const [resultPublished, setResultPublished] = useState(false);
+  const [mqttConnected, setMqttConnected] = useState(false);
 
-  /* ================= REAL TIME CLOCK ================= */
+  const [mqttSignals, setMqttSignals] = useState([]);
+  const lastVinRef = useRef(null);
+  const vinTopicRef = useRef(null);
+
+  /* ================= OK / NOT OK LOGIC ================= */
+  const isTorqueOk =
+    minLeak !== "-" &&
+    maxLeak !== "-" &&
+    liveLeak >= Number(minLeak) &&
+    liveLeak <= Number(maxLeak);
+
+  /* ================= CLOCK ================= */
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  /* ================= FETCH JOB DATA FROM API ================= */
+  /* ================= LOAD MQTT SIGNALS ================= */
   useEffect(() => {
-    const fetchJobData = async () => {
-      try {
-        const res = await fetch("http://YOUR_API/leak-test/current");
-        const data = await res.json();
+    if (isInvalidStage) return;
 
-        setJobData({
-          vin: data.vin,
-          sku: data.sku,
-          model: data.model,
-          stageNo: data.stageNo,
-          side: data.side,
-          minLeak: data.minLeak,
-          maxLeak: data.maxLeak,
-        });
+    const fetchSignals = async () => {
+      try {
+        const res = await fetch(`${MQTT_SIGNAL_API}/${stageNumber}`);
+        const json = await res.json();
+
+        if (json.success && json.signals) {
+          setMqttSignals(json.signals.filter((s) => s.active));
+        }
       } catch (err) {
-        console.error("Job API Error", err);
+        console.error("Signal Load Error:", err);
       }
     };
 
-    fetchJobData();
+    fetchSignals();
+  }, [stageNumber]);
+
+  /* ================= ANIMATION STYLES ================= */
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+      @keyframes fullScreenFlashRed {
+        0% { background-color: #000; }
+        50% { background-color: #330000; }
+        100% { background-color: #000; }
+      }
+
+      @keyframes fullScreenPulseGreen {
+        0% { background-color: #000; }
+        50% { background-color: #002200; }
+        100% { background-color: #000; }
+      }
+    `;
+    document.head.appendChild(style);
   }, []);
 
-  /* ================= MQTT CONNECT ================= */
+  const handleVinKeyDown = (e) => {
+    if (e.key === "Enter") {
+      const trimmed = vinInput.trim();
+      if (!trimmed) return;
+
+      lastVinRef.current = trimmed; // prevent duplicate MQTT call
+      fetchModelData(trimmed, stageNumber);
+    }
+  };
+
+  const getRootStyle = () => {
+    let baseStyle = { ...styles.root };
+
+    if (showResult) {
+      if (finalStatus === "PASS") {
+        baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+      } else {
+        baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+      }
+    }
+
+    return baseStyle;
+  };
+
+  /* ================= SIGNAL DETECTION ================= */
+
+  const vinSignal = mqttSignals.find((s) =>
+    s.topic?.toLowerCase().includes("engineno"),
+  );
+
+  /* ================= GENERIC MQTT LISTENER ================= */
+
+  /* ================= VIN LISTENER ================= */
+
   useEffect(() => {
-    const client = mqtt.connect("ws://BROKER_IP:PORT");
+    if (!stageNumber) return;
+
+    if (mqttClientRef.current) {
+      mqttClientRef.current.end(true);
+    }
+
+    const client = mqtt.connect("ws://192.168.1.15:9001", {
+      reconnectPeriod: 3000,
+      clean: true,
+    });
+
     mqttClientRef.current = client;
 
     client.on("connect", () => {
-      client.subscribe("leak/value");
+      console.log("MQTT Connected ✅");
+      setMqttConnected(true);
+
+      if (vinSignal?.topic) {
+        client.subscribe(vinSignal.topic);
+      }
+
+      client.subscribe(torqueTopic);
+
+      client.subscribe(prePitchTopic);
+      client.subscribe(leakTopic);
     });
 
     client.on("message", (topic, message) => {
-      if (topic === "leak/value") {
-        const value = parseFloat(message.toString());
-        if (!isNaN(value)) setLeakValue(value);
+      const payload = message.toString();
+
+      /* ===== VIN ===== */
+      if (topic === vinTopicRef.current) {
+        const vin = payload.trim();
+
+        if (!vin) return;
+        if (lastVinRef.current === vin) return;
+
+        lastVinRef.current = vin;
+        setVinInput(vin);
+        fetchModelData(vin, stageNumber);
+      }
+
+      /* ===== Leak ===== */
+
+      if (topic === leakTopic) {
+        const value = Number(payload);
+        if (!isNaN(value)) {
+          setLiveLeak(value);
+        }
+      }
+
+      if (topic === prePitchTopic) {
+        const value = Number(payload);
+
+        if (!isNaN(value)) {
+          setPrePitch(value);
+          console.log("PrePitch received from DataLogger:", value);
+        }
       }
     });
 
-    return () => client.end();
-  }, []);
+    client.on("close", () => {
+      if (!client.connected) {
+        console.log("MQTT Disconnected ❌");
+        setMqttConnected(false);
+      }
+    });
 
-  /* ================= LEAK COMPARISON LOGIC ================= */
+    client.on("offline", () => {
+      console.log("MQTT Offline ❌");
+      setMqttConnected(false);
+    });
+
+    client.on("error", (err) => {
+      console.error("MQTT Error:", err);
+      setMqttConnected(false);
+    });
+
+    client.on("reconnect", () => {
+      console.log("MQTT Reconnecting...");
+    });
+
+    return () => {
+      client.end();
+    };
+  }, [stageNumber]);
+
   useEffect(() => {
-    if (leakValue === null) return;
+    if (!vinSignal?.topic) return;
 
-    const { minLeak, maxLeak } = jobData;
-    let currentResult = "NOT_OK";
+    vinTopicRef.current = vinSignal.topic;
 
-    if (leakValue >= minLeak && leakValue <= maxLeak) {
-      currentResult = "OK";
+    if (mqttClientRef.current) {
+      mqttClientRef.current.subscribe(vinSignal.topic);
+      console.log("Subscribed to VIN topic:", vinSignal.topic);
+    }
+  }, [vinSignal]);
+
+  /* ================= TIGHTENING LISTENER ================= */
+
+  /* ================= PASS / FAIL LOGIC ================= */
+
+  useEffect(() => {
+    if (
+      minLeak === "-" ||
+      maxLeak === "-" ||
+      liveLeak <= 0 ||
+      !mqttClientRef.current
+    ) {
+      return;
     }
 
-    setResult(currentResult);
+    const pass = liveLeak >= Number(minLeak) && liveLeak <= Number(maxLeak);
 
-    if (lastPublishedResult.current !== currentResult) {
-      mqttClientRef.current?.publish(
-        "leak/result",
-        currentResult === "OK" ? "1" : "0",
-      );
-      lastPublishedResult.current = currentResult;
+    const result = pass ? "1" : "0";
+
+    setFinalStatus(pass ? "PASS" : "FAIL");
+    setShowResult(true);
+    setShowLeakValue(true);
+
+    // 🔹 CASE 1 → Before PrePitch
+    if (prePitch === 0) {
+      if (pass) {
+        mqttClientRef.current.publish(resultTopic, "1");
+        console.log("Published OK before PrePitch");
+      }
+      return;
     }
-  }, [leakValue, jobData]);
+
+    // 🔹 CASE 2 → After PrePitch
+    if (prePitch === 1) {
+      mqttClientRef.current.publish(resultTopic, result);
+      console.log("Published After PrePitch:", result);
+    }
+  }, [liveLeak, prePitch]);
+  /* ================= FETCH MODEL DATA ================= */
+
+  const fetchModelData = async (vin_no, stage_no) => {
+    setFinalStatus(null);
+    setLiveLeak(0);
+    setShowResult(false);
+    setShowLeakValue(false);
+    setPrePitch(0);
+    setResultPublished(false);
+
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vin_no,
+          stage_no,
+        }),
+      });
+
+      const json = await res.json();
+      if (!json) return;
+
+      const recipeProcess = json.recipeProcess?.[0];
+
+      setModelName(json.model?.model_name ?? "-");
+      setModelSku(json.model?.model_code ?? "-");
+
+      setStageName(json.routeStep?.stage_name ?? "-");
+
+      setMinLeak(recipeProcess?.lsl ?? "-");
+      setMaxLeak(recipeProcess?.usl ?? "-");
+    } catch (err) {
+      console.error("Model fetch failed", err);
+    }
+  };
 
   const formatDate = now.toLocaleDateString("en-GB");
   const formatTime = now.toLocaleTimeString("en-US", {
@@ -615,18 +309,20 @@ const LeakTest = () => {
     hour12: true,
   });
 
+  if (isInvalidStage) {
+    return <div>Invalid Stage Number</div>;
+  }
+
   return (
-    <div style={styles.root}>
+    <div style={getRootStyle()}>
       {/* ================= HEADER ================= */}
       <div style={styles.header}>
-        <img src="/hero-logo.png" alt="Hero Logo" style={styles.heroLogo} />
-
+        <img src="/Hero.svg" alt="Hero Logo" style={styles.heroLogo} />
         <div style={styles.headerPill}>
-          <div style={styles.headerTitle}>LEAK TEST STAGE</div>
+          <div style={styles.headerTitle}>DC TOOL TIGHTENING</div>
         </div>
-
         <img
-          src="/operatex-logo.jpg"
+          src="/operatex.png"
           alt="OperateX Logo"
           style={styles.operatexLogo}
         />
@@ -635,9 +331,16 @@ const LeakTest = () => {
       {/* ================= MODEL ROW ================= */}
       <div style={styles.modelRow}>
         <div style={styles.modelText}>
-          Model: <span style={styles.modelValue}>{jobData.model}</span>
+          Model: <span style={styles.modelValue}>{modelName}</span>
         </div>
-        <div style={styles.mqtt}>MQTT Connected</div>
+        <div
+          style={{
+            ...styles.mqtt,
+            color: mqttConnected ? "#00ff00" : "#ff0033",
+          }}
+        >
+          {mqttConnected ? "MQTT Connected" : "MQTT Disconnected"}
+        </div>
       </div>
 
       {/* ================= LINE STATUS ================= */}
@@ -647,12 +350,7 @@ const LeakTest = () => {
           <span
             style={{
               ...styles.lineStatusValue,
-              color:
-                lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000df",
-              textShadow:
-                lineStatus === "INTERLOCKED"
-                  ? "0 0 10px #00ff00"
-                  : "0 0 10px #ff8000df",
+              color: lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000df",
             }}
           >
             {lineStatus}
@@ -687,16 +385,21 @@ const LeakTest = () => {
           <div style={styles.circleRow}>
             <div style={styles.circleOuter}>
               <div style={styles.circleInner}>
-                <div style={styles.circleValue}>{jobData.stageNo}</div>
+                <div style={styles.circleValue}>{stageNo}</div>
               </div>
-              <div style={styles.circleLabel}>Stage<br />Number</div>
+              <div style={styles.circleLabel}>
+                Stage
+                <br />
+                Number
+              </div>
             </div>
 
-            <div style={styles.circleOuter}>
-              <div style={styles.circleInner}>
-                <div style={styles.circleValue}>{jobData.side}</div>
+            <div style={styles.stageNameBox}>
+              <div style={styles.stageNameText}>{stageName}</div>
+              <div style={styles.stageNameLabel}>
+                Stage
+                <br /> Name
               </div>
-              <div style={styles.circleLabel}>Side</div>
             </div>
           </div>
 
@@ -712,63 +415,83 @@ const LeakTest = () => {
           </div>
         </div>
 
-        {/* LIMITS */}
+        {/* TORQUE LIMIT */}
         <div style={styles.torqueLimits}>
           <div style={styles.torqueBox}>
-            <div style={styles.torqueValue}>{jobData.minLeak}</div>
-            <div style={styles.torqueLabel}>MINIMUM<br />LEAK VALUE</div>
+            <div style={styles.torqueValue}>{minLeak}</div>
+            <div style={styles.torqueLabel}>
+              MINIMUM
+              <br />
+              LEAK
+            </div>
           </div>
-
           <div style={styles.torqueDivider} />
-
           <div style={styles.torqueBox}>
-            <div style={styles.torqueValue}>{jobData.maxLeak}</div>
-            <div style={styles.torqueLabel}>MAXIMUM<br />LEAK VALUE</div>
+            <div style={styles.torqueValue}>{maxLeak}</div>
+            <div style={styles.torqueLabel}>
+              MAXIMUM
+              <br />
+              LEAK
+            </div>
           </div>
         </div>
 
         {/* RIGHT PANEL */}
         <div style={styles.rightPanel}>
-          <div style={styles.vinBox}>VIN: {jobData.vin}</div>
+          <input
+            style={styles.vinBox}
+            placeholder="ENTER VIN & PRESS ENTER"
+            value={vinInput}
+            onChange={(e) => {
+              setVinInput(e.target.value);
+              setShowResult(false);
+              setShowLeakValue(false);
+            }}
+            onKeyDown={handleVinKeyDown}
+          />
 
-          <div style={styles.skuRow}>
-            <div style={styles.skuText}>
-              SKU: <span style={styles.yellow}>{jobData.sku}</span>
-            </div>
-
-            <div
-              style={{
-                ...styles.resultBtn,
-                background:
-                  result === "OK"
-                    ? "#00ff00"
-                    : result === "NOT_OK"
-                    ? "#ff0000"
-                    : "#888",
-                boxShadow:
-                  result === "OK"
-                    ? "0 0 15px #00ff00"
-                    : result === "NOT_OK"
-                    ? "0 0 15px #ff0000"
-                    : "none",
-              }}
-            >
-              {result ?? "WAIT"}
+          <div style={styles.skuBlock}>
+            <div style={styles.skuRow}>
+              <div style={styles.skuText}>
+                SKU - <span style={styles.yellow}>{modelSku}</span>
+              </div>
             </div>
           </div>
 
           <div style={styles.torqueDisplay}>
-            <div style={styles.torqueIndicator}>
-              <span style={{ fontSize: 40, fontWeight: "bold" }}>
-                {leakValue ?? "--"}
-              </span>
+            <div
+              style={{
+                fontSize: 80,
+                fontWeight: "bold",
+                color: isTorqueOk ? "#00ff00" : "#ff0033",
+                textAlign: "center",
+                width: "100%",
+                textShadow: isTorqueOk
+                  ? "0 0 15px #00ff00"
+                  : "0 0 15px #ff0033",
+                ...(showResult ? styles.blinkText : {}),
+              }}
+            >
+              {showResult && finalStatus}
             </div>
           </div>
 
           <div style={styles.torqueText}>
-            LEAK<br />VALUE
+            {showLeakValue && (
+              <div style={{ fontSize: 60, fontWeight: "bold" }}>
+                {liveLeak} Nm
+              </div>
+            )}
+            LEAK
+            <br />
+            VALUE
           </div>
         </div>
+      </div>
+      {/* FOOTER */}
+      <div style={styles.footer}>
+        Powered by{" "}
+        <span style={styles.footerHighlight}>OperateX Thetavega</span>
       </div>
     </div>
   );
@@ -776,23 +499,15 @@ const LeakTest = () => {
 
 const styles = {
   root: {
-    width: "100%",
-    height: "95vh",
+    width: "100vw",
+    height: "100vh",
     background: "#000",
     color: "#fff",
     fontFamily: "Segoe UI, Arial, sans-serif",
-
-    /* FULL BLUE BORDER – ALL 4 SIDES */
-    border: "6px solid #00c3ff",
-    boxSizing: "border-box",
-
-    /* REMOVE GAP */
-    margin: 0,
-    marginTop: 47,
-
-    /* OPTIONAL: industrial double-line look */
+    border: "8px solid #00c3ff",
     outline: "2px solid #0099cc",
     outlineOffset: -8,
+    boxSizing: "border-box",
   },
 
   header: {
@@ -800,7 +515,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    position: "relative", // ⬅️ IMPORTANT
+    position: "relative",
   },
 
   heroLogo: {
@@ -813,14 +528,19 @@ const styles = {
   operatexLogo: {
     position: "absolute",
     right: 23,
-    height: 55,
-  
+    top: "60%",
+    transform: "translateY(-50%)",
+    height: 155,
     objectFit: "contain",
   },
 
+  blinkText: {
+    animation: "blink 3s infinite",
+  },
+
   headerPill: {
-    width: "50%",
-    background: "#12bdf2",
+    width: "100%",
+    background: "#fff",
     borderRadius: "0 0 22px 22px",
     padding: "12px 0",
     textAlign: "center",
@@ -842,7 +562,8 @@ const styles = {
   modelText: {
     flex: 1,
     color: "#ffd000",
-    fontSize: 35,
+    fontSize: 38,
+    fontWeight: "bold",
   },
 
   modelValue: { fontWeight: "bold" },
@@ -898,7 +619,7 @@ const styles = {
 
   leftPanel: {
     width: 500,
-    border: "4px solid #b400ff",
+    border: "10px solid #b400ff",
     borderRadius: 16,
     padding: 16,
     height: 500,
@@ -906,10 +627,10 @@ const styles = {
 
   circleRow: {
     display: "flex",
-    justifyContent: "center", // ⬅️ centers both circles together
-    alignItems: "flex-start",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 80,
-    marginTop: 20, // ⬅️ space between the two circles
+    marginTop: 20,
   },
 
   circleOuter: { textAlign: "center" },
@@ -918,8 +639,8 @@ const styles = {
     width: 130,
     height: 130,
     borderRadius: "60%",
-    border: "4px solid #00ff00",
-    outline: "4px solid #b400ff",
+    border: "8px solid #00ff00",
+    outline: "8px solid #b400ff",
     outlineOffset: 5,
     display: "flex",
     justifyContent: "center",
@@ -936,6 +657,27 @@ const styles = {
     marginTop: 12,
     fontSize: 23,
     fontWeight: "bold",
+  },
+
+  stageNameBox: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center", // 🔥 center align like circle
+    justifyContent: "center",
+    textAlign: "center",
+  },
+
+  stageNameText: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#00d4ff",
+    letterSpacing: 1,
+  },
+
+  stageNameLabel: {
+    fontSize: 23,
+    fontWeight: "bold",
+    marginTop: 23,
   },
 
   dateTimeBlock: {
@@ -986,13 +728,14 @@ const styles = {
   torqueDivider: {
     height: 2,
     width: "80%",
-    background: "#b400ff",
+    background: "#ff8000df",
     margin: "20px 0",
+    border: "5px solid #ff8000df",
   },
 
   rightPanel: {
     flex: 1,
-    border: "4px solid #00c3ff",
+    border: "10px solid #00c3ff",
     padding: 10,
     borderRadius: 16,
   },
@@ -1005,6 +748,7 @@ const styles = {
     padding: 10,
     borderRadius: 20,
     marginBottom: 15,
+    width: "100%",
   },
 
   skuBlock: {
@@ -1022,16 +766,6 @@ const styles = {
   skuText: { color: "#fff" },
   yellow: { color: "#ffd000", fontWeight: "bold" },
 
-  resultBtn: {
-    background: "#fff",
-    color: "#000",
-    padding: "6px 18px",
-    borderRadius: 20,
-
-    marginTop: 10,
-    marginLeft: 250,
-  },
-
   angleRow: {
     fontSize: 40,
   },
@@ -1039,7 +773,7 @@ const styles = {
   torqueDisplay: {
     height: 150,
     width: 420,
-    border: "4px solid #00ff00",
+    border: "10px solid #00ff00",
     borderRadius: 20,
     marginTop: 14,
     display: "flex",
@@ -1047,21 +781,34 @@ const styles = {
     padding: 10,
   },
 
-  torqueIndicator: {
-    width: 20,
-    height: 12,
-    background: "#00ff00",
-  },
-
   torqueText: {
     color: "#ffd000",
     fontSize: 20,
     textAlign: "right",
     width: "100%",
-    paddingRight: 230,
-    marginTop: -70,
+    paddingRight: 180,
+    marginTop: -150,
+  },
+
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    width: "100%",
+    background: "#ff8000",
+    color: "#000",
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "bold",
+    padding: "8px 0",
+    letterSpacing: 1,
+    boxShadow: "0 -2px 10px rgba(0,0,0,0.6)",
+    zIndex: 1000,
+  },
+
+  footerHighlight: {
+    fontWeight: "bold",
   },
 };
 
 export default LeakTest;
-
