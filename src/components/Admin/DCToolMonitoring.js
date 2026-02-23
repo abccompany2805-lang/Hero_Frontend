@@ -1,508 +1,289 @@
-// import React, { useEffect, useState } from "react";
+
+// Code with prepitch logic  and without MQTT Connection logic
+// import React, { useEffect, useState, useRef } from "react";
+// import { useParams } from "react-router-dom";
+// import mqtt from "mqtt";
+
+// const API_URL = "http://192.168.1.7:5003/api/vin/get-model-by-vin";
+
+// const MQTT_SIGNAL_API = "http://192.168.1.7:5003/api/mqtt-signal/by-stage-no";
 
 // const DCToolHMI = () => {
 //   const [now, setNow] = useState(new Date());
 
-//   // Dummy states (later from DB / MQTT)
-//   const [operationMode, setOperationMode] = useState("ACTIVE"); // ACTIVE | MANUAL
-//   const [lineStatus, setLineStatus] = useState("INTERLOCKED");  // INTERLOCKED | BYPASSED
+//   /* ================= STAGE ================= */
+//   const { stageNo } = useParams();
+//   const stageNumber = parseInt(stageNo, 10);
+//   const isInvalidStage = isNaN(stageNumber);
+//   const torqueTopic = `ST${stageNumber}_Torque`;
+//   const angleTopic = `ST${stageNumber}_Angle`;
+//   const resultTopic = `ST${stageNumber}_Result`;
+//   const prePitchTopic = "PrePitch";
 
-//   /* ===== REAL-TIME CLOCK ===== */
+//   /* ================= SYSTEM STATES ================= */
+//   const [operationMode, setOperationMode] = useState("AUTO");
+//   const [lineStatus, setLineStatus] = useState("INTERLOCKED");
+
+//   /* ================= API DATA STATES ================= */
+//   const [vinInput, setVinInput] = useState("");
+//   const [modelName, setModelName] = useState("-");
+//   const [modelSku, setModelSku] = useState("-");
+//   const [minTorque, setMinTorque] = useState("-");
+//   const [maxTorque, setMaxTorque] = useState("-");
+//   const [showResult, setShowResult] = useState(false);
+//   const [showTorqueValue, setShowTorqueValue] = useState(false);
+//   const [liveTorque, setLiveTorque] = useState(0);
+//   const [liveAngle, setLiveAngle] = useState(0);
+//   const [finalStatus, setFinalStatus] = useState(null);
+//   const [stageName, setStageName] = useState("-");
+//   const mqttClientRef = useRef(null);
+//   const [prePitch, setPrePitch] = useState(0);
+//   const [resultPublished, setResultPublished] = useState(false);
+
+//   const [mqttSignals, setMqttSignals] = useState([]);
+//   const lastVinRef = useRef(null);
+
+//   /* ================= OK / NOT OK LOGIC ================= */
+//   const isTorqueOk =
+//     minTorque !== "-" &&
+//     maxTorque !== "-" &&
+//     liveTorque >= Number(minTorque) &&
+//     liveTorque <= Number(maxTorque);
+
+//   /* ================= CLOCK ================= */
 //   useEffect(() => {
 //     const timer = setInterval(() => setNow(new Date()), 1000);
 //     return () => clearInterval(timer);
 //   }, []);
 
-//   /* ===== DUMMY MODE TOGGLE ===== */
+//   /* ================= LOAD MQTT SIGNALS ================= */
 //   useEffect(() => {
-//     const modeTimer = setInterval(() => {
-//       setOperationMode(prev => (prev === "ACTIVE" ? "MANUAL" : "ACTIVE"));
-//     }, 5000);
+//     if (isInvalidStage) return;
 
-//     return () => clearInterval(modeTimer);
+//     const fetchSignals = async () => {
+//       try {
+//         const res = await fetch(`${MQTT_SIGNAL_API}/${stageNumber}`);
+//         const json = await res.json();
+
+//         if (json.success && json.signals) {
+//           setMqttSignals(json.signals.filter((s) => s.active));
+//         }
+//       } catch (err) {
+//         console.error("Signal Load Error:", err);
+//       }
+//     };
+
+//     fetchSignals();
+//   }, [stageNumber]);
+
+//   /* ================= ANIMATION STYLES ================= */
+//   useEffect(() => {
+//     const style = document.createElement("style");
+//     style.innerHTML = `
+//       @keyframes fullScreenFlashRed {
+//         0% { background-color: #000; }
+//         50% { background-color: #330000; }
+//         100% { background-color: #000; }
+//       }
+
+//       @keyframes fullScreenPulseGreen {
+//         0% { background-color: #000; }
+//         50% { background-color: #002200; }
+//         100% { background-color: #000; }
+//       }
+//     `;
+//     document.head.appendChild(style);
 //   }, []);
 
-//   /* ===== DUMMY LINE STATUS TOGGLE ===== */
-//   useEffect(() => {
-//     const statusTimer = setInterval(() => {
-//       setLineStatus(prev => (prev === "INTERLOCKED" ? "BYPASSED" : "INTERLOCKED"));
-//     }, 6000);
+//   const handleVinKeyDown = (e) => {
+//     if (e.key === "Enter") {
+//       const trimmed = vinInput.trim();
+//       if (!trimmed) return;
 
-//     return () => clearInterval(statusTimer);
-//   }, []);
+//       lastVinRef.current = trimmed; // prevent duplicate MQTT call
+//       fetchModelData(trimmed, stageNumber);
+//     }
+//   };
 
-//   const formatDate = now.toLocaleDateString("en-GB");
-//   const formatTime = now.toLocaleTimeString("en-US", {
-//     hour: "2-digit",
-//     minute: "2-digit",
-//     hour12: true,
-//   });
+//   const getRootStyle = () => {
+//     let baseStyle = { ...styles.root };
 
-//   return (
-//     <div style={styles.root}>
-//       {/* ================= HEADER ================= */}
-//       <div style={styles.header}>
-//         <div style={styles.headerPill}>
-//           <div style={styles.headerTitle}>FRONT WHEEL AXLE TIGHTENING</div>
-//         </div>
-//       </div>
+//     if (showResult) {
+//       if (finalStatus === "PASS") {
+//         baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+//       } else {
+//         baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+//       }
+//     }
 
-//       {/* ================= MODEL ROW ================= */}
-//       <div style={styles.modelRow}>
-//         <div style={styles.modelText}>
-//           Model:{" "}
-//           <span style={styles.modelValue}>
-//             PULSAR 125 CARBON EBONY BLK Grey DKL
-//           </span>
-//         </div>
-//         <div style={styles.mqtt}>MQTT Connected</div>
-//       </div>
+//     return baseStyle;
+//   };
 
-//       {/* ================= LINE STATUS ================= */}
-//       <div style={styles.lineStatusRow}>
-//         {/* LEFT */}
-//         <div style={styles.lineStatusLeft}>
-//           <span style={styles.lineStatusTitle}>LINE STATUS :</span>
-//           <span
-//             style={{
-//               ...styles.lineStatusValue,
-//               color: lineStatus === "INTERLOCKED" ? "#ff0000" : "#00ff00",
-//               textShadow:
-//                 lineStatus === "INTERLOCKED"
-//                   ? "0 0 10px #ff0000"
-//                   : "0 0 10px #00ff00",
-//             }}
-//           >
-//             {lineStatus}
-//           </span>
-//         </div>
+//   /* ================= SIGNAL DETECTION ================= */
 
-//         {/* RIGHT */}
-//         <div style={styles.lineStatusRight}>
-//           <span
-//             style={{
-//               ...styles.lineActive,
-//               opacity: operationMode === "ACTIVE" ? 1 : 0.3,
-//               textShadow:
-//                 operationMode === "ACTIVE" ? "0 0 8px #00ff00" : "none",
-//             }}
-//           >
-//             ACTIVE
-//           </span>
-
-//           <span style={styles.lineSeparator}>|</span>
-
-//           <span
-//             style={{
-//               ...styles.lineManual,
-//               opacity: operationMode === "MANUAL" ? 1 : 0.3,
-//               textShadow:
-//                 operationMode === "MANUAL" ? "0 0 8px #ffd000" : "none",
-//             }}
-//           >
-//             MANUAL
-//           </span>
-//         </div>
-//       </div>
-
-//       {/* ================= BODY ================= */}
-//       <div style={styles.body}>
-//         {/* LEFT PANEL */}
-//         <div style={styles.leftPanel}>
-//           <div style={styles.circleRow}>
-//             <div style={styles.circleOuter}>
-//               <div style={styles.circleInner}>
-//                 <div style={styles.circleValue}>10</div>
-//               </div>
-//               <div style={styles.circleLabel}>Stage<br />Number</div>
-//             </div>
-
-//             <div style={styles.circleOuter}>
-//               <div style={styles.circleInner}>
-//                 <div style={styles.circleValue}>RH</div>
-//               </div>
-//               <div style={styles.circleLabel}>Side</div>
-//             </div>
-//           </div>
-
-//           <div style={styles.dateTimeBlock}>
-//             <div style={styles.dateTimeRow}>
-//               <div style={styles.dateTimeLabel}>DATE</div>
-//               <div style={styles.dateTimeValue}>{formatDate}</div>
-//             </div>
-
-//             <div style={styles.dateTimeRow}>
-//               <div style={styles.dateTimeLabel}>TIME</div>
-//               <div style={styles.dateTimeValue}>{formatTime}</div>
-//             </div>
-//           </div>
-//         </div>
-
-//         {/* TORQUE LIMIT */}
-//         <div style={styles.torqueLimits}>
-//           <div style={styles.torqueBox}>
-//             <div style={styles.torqueValue}>4.5</div>
-//             <div style={styles.torqueLabel}>MINIMUM<br />TORQUE</div>
-//           </div>
-
-//           <div style={styles.torqueDivider} />
-
-//           <div style={styles.torqueBox}>
-//             <div style={styles.torqueValue}>5.5</div>
-//             <div style={styles.torqueLabel}>MAXIMUM<br />TORQUE</div>
-//           </div>
-//         </div>
-
-//         {/* RIGHT PANEL */}
-//         <div style={styles.rightPanel}>
-//           <div style={styles.vinBox}>VIN: MD2B68BX2TWL20741</div>
-
-//           <div style={styles.skuBlock}>
-//             <div style={styles.skuRow}>
-//               <div style={styles.skuText}>
-//                 SKU: <span style={styles.yellow}>00DH71D7</span>
-//               </div>
-//               <div style={styles.resultBtn}>RESULT</div>
-//             </div>
-
-//             <div style={styles.angleRow}>
-//               ANGLE <span style={styles.yellow}>-</span>
-//             </div>
-//           </div>
-
-//           <div style={styles.torqueDisplay}>
-//             <div style={styles.torqueIndicator}></div>
-//           </div>
-
-//           <div style={styles.torqueText}>
-//             TORQUE<br />VALUE
-//           </div>
-//         </div>
-//       </div>
-//     </div>
+//   const vinSignal = mqttSignals.find((s) =>
+//     s.topic?.toLowerCase().includes("engineno"),
 //   );
-// };
 
-// /* ================= STYLES ================= */
-// const styles = {
-//   root: {
-//   width: "100%",
-//   height: "100vh",
-//   background: "#000",
-//   color: "#fff",
-//   fontFamily: "Segoe UI, Arial, sans-serif",
+//   /* ================= GENERIC MQTT LISTENER ================= */
 
-//   /* FULL BLUE BORDER – ALL 4 SIDES */
-//   border: "6px solid #00c3ff",
-//   boxSizing: "border-box",
+//   /* ================= VIN LISTENER ================= */
 
-//   /* REMOVE GAP */
-//   margin: 0,
-//   marginTop: 35,
-
-//   /* OPTIONAL: industrial double-line look */
-//   outline: "2px solid #0099cc",
-//   outlineOffset: -8,
-// },
-
-
-//   header: {
-//     height: 80,
-//     display: "flex",
-//     justifyContent: "center",
-//   },
-
-//   headerPill: {
-//     width: "50%",
-//     background: "#12bdf2",
-//     borderRadius: "0 0 22px 22px",
-//     padding: "12px 0",
-//     textAlign: "center",
-//   },
-
-//   headerTitle: {
-//     fontSize: 35,
-//     fontWeight: "bold",
-//     color: "#000",
-//   },
-
-//   modelRow: {
-//     display: "flex",
-//     padding: "8px 20px",
-//     borderBottom: "2px solid #222",
-//   },
-
-//   modelText: {
-//     flex: 1,
-//     color: "#ffd000",
-//     fontSize: 35,
-//   },
-
-//   modelValue: { fontWeight: "bold" },
-
-//   mqtt: {
-//     color: "#00ff00",
-//     fontSize: 28,
-//     fontWeight: "bold",
-//   },
-
-//   lineStatusRow: {
-//     display: "flex",
-//     justifyContent: "space-between",
-//     alignItems: "center",
-//     padding: "10px 20px",
-//     background: "#111",
-//     borderBottom: "2px solid #222",
-//   },
-
-//   lineStatusLeft: {
-//     display: "flex",
-//     alignItems: "center",
-//   },
-
-//   lineStatusTitle: {
-//     fontSize: 32,
-//     color: "#00c3ff",
-//     marginRight: 10,
-//     fontWeight: "bold",
-//   },
-
-//   lineStatusValue: {
-//     fontSize: 32,
-//     fontWeight: "bold",
-//   },
-
-//   lineStatusRight: {
-//     display: "flex",
-//     alignItems: "center",
-//     fontSize: 28,
-//     fontWeight: "bold",
-//   },
-
-//   lineActive: { color: "#00ff00" },
-//   lineManual: { color: "#ffd000" },
-//   lineSeparator: { margin: "0 10px", color: "#888" },
-
-//   body: {
-//     display: "flex",
-//     padding: "20px 0",
-//     gap: 20,
-//   },
-
-//   leftPanel: {
-//     width: 300,
-//     border: "2px solid #b400ff",
-//     borderRadius: 16,
-//     padding: 16,
-//   },
-
-//   circleRow: {
-//     display: "flex",
-//     justifyContent: "space-between",
-//   },
-
-//   circleOuter: { textAlign: "center" },
-
-//   circleInner: {
-//     width: 120,
-//     height: 120,
-//     borderRadius: "50%",
-//     border: "3px solid #00ff00",
-//     outline: "3px solid #b400ff",
-//     outlineOffset: 4,
-//     display: "flex",
-//     justifyContent: "center",
-//     alignItems: "center",
-//   },
-
-//   circleValue: {
-//     fontSize: 44,
-//     color: "#ffd000",
-//     fontWeight: "bold",
-//   },
-
-//   circleLabel: {
-//     marginTop: 12,
-//     fontSize: 21,
-//     fontWeight: "bold",
-//   },
-
-//   dateTimeBlock: {
-//     marginTop: 80,
-//     display: "flex",
-//     flexDirection: "column",
-//     gap: 16,
-//   },
-
-//   dateTimeRow: {
-//     display: "flex",
-//     gap: 30,
-//     alignItems: "center",
-//   },
-
-//   dateTimeLabel: {
-//     background: "#fff",
-//     color: "#000",
-//     padding: "6px 14px",
-//     borderRadius: 6,
-//     fontWeight: "bold",
-//   },
-
-//   dateTimeValue: {
-//     fontSize: 30,
-//     fontWeight: "bold",
-//   },
-
-//   torqueLimits: {
-//     width: 180,
-//     display: "flex",
-//     flexDirection: "column",
-//     alignItems: "center",
-//     justifyContent: "center",
-//   },
-
-//   torqueBox: { textAlign: "center" },
-
-//   torqueValue: {
-//     fontSize: 50,
-//     color: "#ffd000",
-//     fontWeight: "bold",
-//   },
-
-//   torqueLabel: { fontSize: 16 },
-
-//   torqueDivider: {
-//     height: 2,
-//     width: "80%",
-//     background: "#b400ff",
-//     margin: "20px 0",
-//   },
-
-//   rightPanel: {
-//     flex: 1,
-//     border: "3px solid #00c3ff",
-//     padding: 10,
-//     borderRadius: 16,
-//   },
-
-//   vinBox: {
-//     background: "#fff",
-//     color: "#000",
-//     fontSize: 40,
-//     fontWeight: "bold",
-//     padding: 10,
-//     borderRadius: 20,
-//     marginBottom: 15,
-//   },
-
-//   skuBlock: {
-//     display: "flex",
-//     flexDirection: "column",
-//     gap: 10,
-//   },
-
-//   skuRow: {
-//     display: "flex",
-//     gap: 25,
-//     fontSize: 40,
-//   },
-
-//   skuText: { color: "#fff" },
-//   yellow: { color: "#ffd000" },
-
-//   resultBtn: {
-//     background: "#fff",
-//     color: "#000",
-//     padding: "6px 18px",
-//     borderRadius: 20,
-//     fontWeight: "bold",
-//     marginTop: 25,
-//     marginLeft: 300,
-//   },
-
-//   angleRow: {
-//     fontSize: 40,
-//   },
-
-//   torqueDisplay: {
-//     height: 150,
-//     width: 420,
-//     border: "4px solid #00ff00",
-//     borderRadius: 20,
-//     marginTop: 14,
-//     display: "flex",
-//     alignItems: "center",
-//     padding: 10,
-//   },
-
-//   torqueIndicator: {
-//     width: 20,
-//     height: 12,
-//     background: "#00ff00",
-//   },
-
-//   torqueText: {
-//     color: "#ffd000",
-//     fontSize: 20,
-//     textAlign: "right",
-//     width: "100%",
-//     paddingRight: 230,
-//     marginTop: -60,
-//   },
-// };
-
-// export default DCToolHMI;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// code with dummy data
-// import React, { useEffect, useState } from "react";
-
-// const DCToolHMI = () => {
-//   const [now, setNow] = useState(new Date());
-
-//   // Dummy states (later from DB / MQTT)
-//   const [operationMode, setOperationMode] = useState("ACTIVE"); // ACTIVE | MANUAL
-//   const [lineStatus, setLineStatus] = useState("INTERLOCKED"); // INTERLOCKED | BYPASSED
-
-//   /* ===== REAL-TIME CLOCK ===== */
 //   useEffect(() => {
-//     const timer = setInterval(() => setNow(new Date()), 1000);
-//     return () => clearInterval(timer);
-//   }, []);
+//     if (!vinSignal?.topic && !stageNumber) return;
 
-//   /* ===== DUMMY MODE TOGGLE ===== */
+//     if (mqttClientRef.current) {
+//       mqttClientRef.current.end(true);
+//     }
+
+//     const client = mqtt.connect("ws://192.168.1.7:9001", {
+//       reconnectPeriod: 3000,
+//       clean: true,
+//     });
+
+//     mqttClientRef.current = client;
+
+//     client.on("connect", () => {
+//       console.log("MQTT Connected ✅");
+
+//       // VIN dynamic topic
+//       if (vinSignal?.topic) {
+//         client.subscribe(vinSignal.topic);
+//       }
+
+//       // Static Torque + Angle topics
+//       client.subscribe(torqueTopic);
+//       client.subscribe(angleTopic);
+//       client.subscribe(prePitchTopic);
+//     });
+
+//     client.on("message", (topic, message) => {
+//       const payload = message.toString();
+
+//       /* ===== VIN ===== */
+//       if (topic === vinSignal?.topic) {
+//         const vin = payload.trim();
+
+//         if (!vin) return;
+//         if (lastVinRef.current === vin) return;
+
+//         lastVinRef.current = vin;
+//         setVinInput(vin);
+//         fetchModelData(vin, stageNumber);
+//       }
+
+//       /* ===== Torque ===== */
+//       if (topic === torqueTopic) {
+//         const value = Number(payload);
+//         if (!isNaN(value)) {
+//           setLiveTorque(value);
+//         }
+//       }
+
+//       /* ===== Angle ===== */
+//       if (topic === angleTopic) {
+//         const value = Number(payload);
+//         if (!isNaN(value)) {
+//           setLiveAngle(value);
+//         }
+//       }
+
+//       if (topic === prePitchTopic) {
+//         const value = Number(payload);
+
+//         if (!isNaN(value)) {
+//           setPrePitch(value);
+//           console.log("PrePitch received from DataLogger:", value);
+//         }
+//       }
+//     });
+
+//     client.on("error", (err) => {
+//       console.error("MQTT Error:", err);
+//     });
+
+//     return () => {
+//       client.end();
+//     };
+//   }, [vinSignal?.topic, stageNumber]);
+
+//   /* ================= TIGHTENING LISTENER ================= */
+
+//   /* ================= PASS / FAIL LOGIC ================= */
+
 //   useEffect(() => {
-//     const modeTimer = setInterval(() => {
-//       setOperationMode((prev) => (prev === "AUTO" ? "MANUAL" : "AUTO"));
-//     }, 5000);
+//   if (
+//     minTorque === "-" ||
+//     maxTorque === "-" ||
+//     liveTorque <= 0 ||
+//     !mqttClientRef.current
+//   ) {
+//     return;
+//   }
 
-//     return () => clearInterval(modeTimer);
-//   }, []);
+//   const pass =
+//     liveTorque >= Number(minTorque) &&
+//     liveTorque <= Number(maxTorque);
 
-//   /* ===== DUMMY LINE STATUS TOGGLE ===== */
-//   useEffect(() => {
-//     const statusTimer = setInterval(() => {
-//       setLineStatus((prev) =>
-//         prev === "INTERLOCKED" ? "BYPASSED" : "INTERLOCKED",
-//       );
-//     }, 6000);
+//   const result = pass ? "OK" : "NOT_OK";
 
-//     return () => clearInterval(statusTimer);
-//   }, []);
+//   setFinalStatus(pass ? "PASS" : "FAIL");
+//   setShowResult(true);
+//   setShowTorqueValue(true);
+
+//   // 🔹 CASE 1 → Before PrePitch
+//   if (prePitch === 0) {
+//     if (pass) {
+//       mqttClientRef.current.publish(resultTopic, "OK");
+//       console.log("Published OK before PrePitch");
+//     }
+//     return;
+//   }
+
+//   // 🔹 CASE 2 → After PrePitch
+//   if (prePitch === 1) {
+//     mqttClientRef.current.publish(resultTopic, result);
+//     console.log("Published After PrePitch:", result);
+//   }
+
+// }, [liveTorque, prePitch]);
+//   /* ================= FETCH MODEL DATA ================= */
+
+//   const fetchModelData = async (vin_no, stage_no) => {
+//     setFinalStatus(null);
+//     setLiveTorque(0);
+//     setLiveAngle(0);
+//     setShowResult(false);
+//     setShowTorqueValue(false);
+//     setPrePitch(0);
+//     setResultPublished(false);
+
+//     try {
+//       const res = await fetch(API_URL, {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({
+//           vin_no,
+//           stage_no,
+//         }),
+//       });
+
+//       const json = await res.json();
+//       if (!json) return;
+
+//       const recipeProcess = json.recipeProcess?.[0];
+
+//       setModelName(json.model?.model_name ?? "-");
+//       setModelSku(json.model?.model_code ?? "-");
+
+//       setStageName(json.routeStep?.stage_name ?? "-");
+
+//       setMinTorque(recipeProcess?.lsl ?? "-");
+//       setMaxTorque(recipeProcess?.usl ?? "-");
+//     } catch (err) {
+//       console.error("Model fetch failed", err);
+//     }
+//   };
 
 //   const formatDate = now.toLocaleDateString("en-GB");
 //   const formatTime = now.toLocaleTimeString("en-US", {
@@ -511,21 +292,20 @@
 //     hour12: true,
 //   });
 
+//   if (isInvalidStage) {
+//     return <div>Invalid Stage Number</div>;
+//   }
+
 //   return (
-//     <div style={styles.root}>
+//     <div style={getRootStyle()}>
 //       {/* ================= HEADER ================= */}
 //       <div style={styles.header}>
-//         {/* LEFT LOGO */}
-//         <img src="/hero-logo.png" alt="Hero Logo" style={styles.heroLogo} />
-
-//         {/* CENTER TITLE */}
+//         <img src="/Hero.svg" alt="Hero Logo" style={styles.heroLogo} />
 //         <div style={styles.headerPill}>
 //           <div style={styles.headerTitle}>FRONT WHEEL AXLE TIGHTENING</div>
 //         </div>
-
-//         {/* RIGHT LOGO */}
 //         <img
-//           src="/operatex-logo.jpg"
+//           src="/operatex.png"
 //           alt="OperateX Logo"
 //           style={styles.operatexLogo}
 //         />
@@ -534,54 +314,39 @@
 //       {/* ================= MODEL ROW ================= */}
 //       <div style={styles.modelRow}>
 //         <div style={styles.modelText}>
-//           Model:{" "}
-//           <span style={styles.modelValue}>
-//             PULSAR 125 CARBON EBONY BLK Grey DKL
-//           </span>
+//           Model: <span style={styles.modelValue}>{modelName}</span>
 //         </div>
 //         <div style={styles.mqtt}>MQTT Connected</div>
 //       </div>
 
 //       {/* ================= LINE STATUS ================= */}
 //       <div style={styles.lineStatusRow}>
-//         {/* LEFT */}
 //         <div style={styles.lineStatusLeft}>
 //           <span style={styles.lineStatusTitle}>LINE STATUS :</span>
 //           <span
 //             style={{
 //               ...styles.lineStatusValue,
 //               color: lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000df",
-//               textShadow:
-//                 lineStatus === "INTERLOCKED"
-//                   ? "0 0 10px #00ff00"
-//                   : "0 0 10px #ff8000df",
 //             }}
 //           >
 //             {lineStatus}
 //           </span>
 //         </div>
 
-//         {/* RIGHT */}
 //         <div style={styles.lineStatusRight}>
 //           <span
 //             style={{
 //               ...styles.lineActive,
 //               opacity: operationMode === "AUTO" ? 1 : 0.3,
-//               textShadow:
-//                 operationMode === "AUTO" ? "0 0 8px #00ff00" : "none",
 //             }}
 //           >
 //             AUTO
 //           </span>
-
 //           <span style={styles.lineSeparator}>|</span>
-
 //           <span
 //             style={{
 //               ...styles.lineManual,
 //               opacity: operationMode === "MANUAL" ? 1 : 0.3,
-//               textShadow:
-//                 operationMode === "MANUAL" ? "0 0 8px #ffd000" : "none",
 //             }}
 //           >
 //             MANUAL
@@ -596,7 +361,7 @@
 //           <div style={styles.circleRow}>
 //             <div style={styles.circleOuter}>
 //               <div style={styles.circleInner}>
-//                 <div style={styles.circleValue}>5</div>
+//                 <div style={styles.circleValue}>{stageNo}</div>
 //               </div>
 //               <div style={styles.circleLabel}>
 //                 Stage
@@ -605,11 +370,12 @@
 //               </div>
 //             </div>
 
-//             <div style={styles.circleOuter}>
-//               <div style={styles.circleInner}>
-//                 <div style={styles.circleValue}>RH</div>
+//             <div style={styles.stageNameBox}>
+//               <div style={styles.stageNameText}>{stageName}</div>
+//               <div style={styles.stageNameLabel}>
+//                 Stage
+//                 <br /> Name
 //               </div>
-//               <div style={styles.circleLabel}>Side</div>
 //             </div>
 //           </div>
 
@@ -618,7 +384,6 @@
 //               <div style={styles.dateTimeLabel}>DATE</div>
 //               <div style={styles.dateTimeValue}>{formatDate}</div>
 //             </div>
-
 //             <div style={styles.dateTimeRow}>
 //               <div style={styles.dateTimeLabel}>TIME</div>
 //               <div style={styles.dateTimeValue}>{formatTime}</div>
@@ -629,18 +394,16 @@
 //         {/* TORQUE LIMIT */}
 //         <div style={styles.torqueLimits}>
 //           <div style={styles.torqueBox}>
-//             <div style={styles.torqueValue}>4.5</div>
+//             <div style={styles.torqueValue}>{minTorque}</div>
 //             <div style={styles.torqueLabel}>
 //               MINIMUM
 //               <br />
 //               TORQUE
 //             </div>
 //           </div>
-
 //           <div style={styles.torqueDivider} />
-
 //           <div style={styles.torqueBox}>
-//             <div style={styles.torqueValue}>5.5</div>
+//             <div style={styles.torqueValue}>{maxTorque}</div>
 //             <div style={styles.torqueLabel}>
 //               MAXIMUM
 //               <br />
@@ -651,56 +414,83 @@
 
 //         {/* RIGHT PANEL */}
 //         <div style={styles.rightPanel}>
-//           <div style={styles.vinBox}>VIN: MD2B68BX2TWL20741</div>
+//           <input
+//             style={styles.vinBox}
+//             placeholder="ENTER VIN & PRESS ENTER"
+//             value={vinInput}
+//             onChange={(e) => {
+//               setVinInput(e.target.value);
+//               setShowResult(false);
+//               setShowTorqueValue(false);
+//             }}
+//             onKeyDown={handleVinKeyDown}
+//           />
 
 //           <div style={styles.skuBlock}>
 //             <div style={styles.skuRow}>
 //               <div style={styles.skuText}>
-//                 SKU: <span style={styles.yellow}>00DH71D7</span>
+//                 SKU - <span style={styles.yellow}>{modelSku}</span>
 //               </div>
-//               <div style={styles.resultBtn}>RESULT</div>
 //             </div>
 
 //             <div style={styles.angleRow}>
-//               ANGLE <span style={styles.yellow}>-</span>
+//               ANGLE -{" "}
+//               {showTorqueValue && (
+//                 <span style={styles.yellow}>{liveAngle}°</span>
+//               )}
 //             </div>
 //           </div>
 
 //           <div style={styles.torqueDisplay}>
-//             <div style={styles.torqueIndicator}></div>
+//             <div
+//               style={{
+//                 fontSize: 80,
+//                 fontWeight: "bold",
+//                 color: isTorqueOk ? "#00ff00" : "#ff0033",
+//                 textAlign: "center",
+//                 width: "100%",
+//                 textShadow: isTorqueOk
+//                   ? "0 0 15px #00ff00"
+//                   : "0 0 15px #ff0033",
+//                 ...(showResult ? styles.blinkText : {}),
+//               }}
+//             >
+//               {showResult && finalStatus}
+//             </div>
 //           </div>
 
 //           <div style={styles.torqueText}>
+//             {showTorqueValue && (
+//               <div style={{ fontSize: 60, fontWeight: "bold" }}>
+//                 {liveTorque} Nm
+//               </div>
+//             )}
 //             TORQUE
 //             <br />
 //             VALUE
 //           </div>
 //         </div>
 //       </div>
+//       {/* FOOTER */}
+//       <div style={styles.footer}>
+//         Powered by{" "}
+//         <span style={styles.footerHighlight}>Operatex Thetavega</span>
+//       </div>
 //     </div>
 //   );
 // };
 
-// /* ================= STYLES ================= */
 // const styles = {
 //   root: {
-//     width: "100%",
-//     height: "95vh",
+//     width: "100vw",
+//     height: "100vh",
 //     background: "#000",
 //     color: "#fff",
 //     fontFamily: "Segoe UI, Arial, sans-serif",
-
-//     /* FULL BLUE BORDER – ALL 4 SIDES */
-//     border: "6px solid #00c3ff",
-//     boxSizing: "border-box",
-
-//     /* REMOVE GAP */
-//     margin: 0,
-//     marginTop: 47,
-
-//     /* OPTIONAL: industrial double-line look */
+//     border: "8px solid #00c3ff",
 //     outline: "2px solid #0099cc",
 //     outlineOffset: -8,
+//     boxSizing: "border-box",
 //   },
 
 //   header: {
@@ -708,7 +498,7 @@
 //     display: "flex",
 //     alignItems: "center",
 //     justifyContent: "center",
-//     position: "relative", // ⬅️ IMPORTANT
+//     position: "relative",
 //   },
 
 //   heroLogo: {
@@ -721,14 +511,19 @@
 //   operatexLogo: {
 //     position: "absolute",
 //     right: 23,
-//     height: 55,
-  
+//     top: "60%",
+//     transform: "translateY(-50%)",
+//     height: 155,
 //     objectFit: "contain",
 //   },
 
+//   blinkText: {
+//     animation: "blink 3s infinite",
+//   },
+
 //   headerPill: {
-//     width: "50%",
-//     background: "#12bdf2",
+//     width: "100%",
+//     background: "#fff",
 //     borderRadius: "0 0 22px 22px",
 //     padding: "12px 0",
 //     textAlign: "center",
@@ -750,7 +545,8 @@
 //   modelText: {
 //     flex: 1,
 //     color: "#ffd000",
-//     fontSize: 35,
+//     fontSize: 38,
+//     fontWeight: "bold",
 //   },
 
 //   modelValue: { fontWeight: "bold" },
@@ -806,7 +602,7 @@
 
 //   leftPanel: {
 //     width: 500,
-//     border: "4px solid #b400ff",
+//     border: "10px solid #b400ff",
 //     borderRadius: 16,
 //     padding: 16,
 //     height: 500,
@@ -814,10 +610,10 @@
 
 //   circleRow: {
 //     display: "flex",
-//     justifyContent: "center", // ⬅️ centers both circles together
-//     alignItems: "flex-start",
+//     justifyContent: "center",
+//     alignItems: "center",
 //     gap: 80,
-//     marginTop: 20, // ⬅️ space between the two circles
+//     marginTop: 20,
 //   },
 
 //   circleOuter: { textAlign: "center" },
@@ -826,8 +622,8 @@
 //     width: 130,
 //     height: 130,
 //     borderRadius: "60%",
-//     border: "4px solid #00ff00",
-//     outline: "4px solid #b400ff",
+//     border: "8px solid #00ff00",
+//     outline: "8px solid #b400ff",
 //     outlineOffset: 5,
 //     display: "flex",
 //     justifyContent: "center",
@@ -844,6 +640,27 @@
 //     marginTop: 12,
 //     fontSize: 23,
 //     fontWeight: "bold",
+//   },
+
+//   stageNameBox: {
+//     display: "flex",
+//     flexDirection: "column",
+//     alignItems: "center", // 🔥 center align like circle
+//     justifyContent: "center",
+//     textAlign: "center",
+//   },
+
+//   stageNameText: {
+//     fontSize: 28,
+//     fontWeight: "bold",
+//     color: "#00d4ff",
+//     letterSpacing: 1,
+//   },
+
+//   stageNameLabel: {
+//     fontSize: 23,
+//     fontWeight: "bold",
+//     marginTop: 23,
 //   },
 
 //   dateTimeBlock: {
@@ -894,13 +711,14 @@
 //   torqueDivider: {
 //     height: 2,
 //     width: "80%",
-//     background: "#b400ff",
+//     background: "#ff8000df",
 //     margin: "20px 0",
+//     border: "5px solid #ff8000df",
 //   },
 
 //   rightPanel: {
 //     flex: 1,
-//     border: "4px solid #00c3ff",
+//     border: "10px solid #00c3ff",
 //     padding: 10,
 //     borderRadius: 16,
 //   },
@@ -913,6 +731,7 @@
 //     padding: 10,
 //     borderRadius: 20,
 //     marginBottom: 15,
+//     width: "100%",
 //   },
 
 //   skuBlock: {
@@ -930,15 +749,837 @@
 //   skuText: { color: "#fff" },
 //   yellow: { color: "#ffd000", fontWeight: "bold" },
 
-//   resultBtn: {
+//   angleRow: {
+//     fontSize: 40,
+//   },
+
+//   torqueDisplay: {
+//     height: 150,
+//     width: 420,
+//     border: "10px solid #00ff00",
+//     borderRadius: 20,
+//     marginTop: 14,
+//     display: "flex",
+//     alignItems: "center",
+//     padding: 10,
+//   },
+
+//   torqueText: {
+//     color: "#ffd000",
+//     fontSize: 20,
+//     textAlign: "right",
+//     width: "100%",
+//     paddingRight: 180,
+//     marginTop: -150,
+//   },
+
+//   footer: {
+//     position: "absolute",
+//     bottom: 0,
+//     left: 0,
+//     width: "100%",
+//     background: "#ff8000",
+//     color: "#000",
+//     textAlign: "center",
+//     fontSize: 16,
+//     fontWeight: "bold",
+//     padding: "8px 0",
+//     letterSpacing: 1,
+//     boxShadow: "0 -2px 10px rgba(0,0,0,0.6)",
+//     zIndex: 1000,
+//   },
+
+//   footerHighlight: {
+//     fontWeight: "bold",
+//   },
+// };
+
+// export default DCToolHMI;
+
+
+
+// import React, { useEffect, useState, useRef } from "react";
+// import { useParams } from "react-router-dom";
+// import mqtt from "mqtt";
+
+// const API_URL = "http://192.168.29.61:5003/api/vin/get-model-by-vin";
+// const MQTT_SIGNAL_API = "http://192.168.29.61:5003/api/mqtt-signal/by-stage-no";
+
+// const DCToolHMI = () => {
+//   const [now, setNow] = useState(new Date());
+
+//   /* ================= STAGE ================= */
+//   const { stageNo } = useParams();
+//   const stageNumber = parseInt(stageNo, 10);
+//   const isInvalidStage = isNaN(stageNumber);
+//   const torqueTopic = `ST${stageNumber}_Torque`;
+//   const angleTopic = `ST${stageNumber}_Angle`;
+//   const resultTopic = `ST${stageNumber}_Result`;
+//   const prePitchTopic = "PrePitch";
+
+//   /* ================= SYSTEM STATES ================= */
+//   const [operationMode, setOperationMode] = useState("AUTO");
+//   const [lineStatus, setLineStatus] = useState("INTERLOCKED");
+
+//   /* ================= API DATA STATES ================= */
+//   const [vinInput, setVinInput] = useState("");
+//   const [modelName, setModelName] = useState("-");
+//   const [modelSku, setModelSku] = useState("-");
+//   const [minTorque, setMinTorque] = useState("-");
+//   const [maxTorque, setMaxTorque] = useState("-");
+//   const [showResult, setShowResult] = useState(false);
+//   const [showTorqueValue, setShowTorqueValue] = useState(false);
+//   const [liveTorque, setLiveTorque] = useState(0);
+//   const [liveAngle, setLiveAngle] = useState(0);
+//   const [finalStatus, setFinalStatus] = useState(null);
+//   const [stageName, setStageName] = useState("-");
+//   const mqttClientRef = useRef(null);
+//   const [prePitch, setPrePitch] = useState(0);
+//   const [resultPublished, setResultPublished] = useState(false);
+//   const [mqttConnected, setMqttConnected] = useState(false);
+
+//   const [mqttSignals, setMqttSignals] = useState([]);
+//   const lastVinRef = useRef(null);
+//   const vinTopicRef = useRef(null);
+
+//   /* ================= OK / NOT OK LOGIC ================= */
+//   const isTorqueOk =
+//     minTorque !== "-" &&
+//     maxTorque !== "-" &&
+//     liveTorque >= Number(minTorque) &&
+//     liveTorque <= Number(maxTorque);
+
+//   /* ================= CLOCK ================= */
+//   useEffect(() => {
+//     const timer = setInterval(() => setNow(new Date()), 1000);
+//     return () => clearInterval(timer);
+//   }, []);
+
+//   /* ================= LOAD MQTT SIGNALS ================= */
+//   useEffect(() => {
+//     if (isInvalidStage) return;
+
+//     const fetchSignals = async () => {
+//       try {
+//         const res = await fetch(`${MQTT_SIGNAL_API}/${stageNumber}`);
+//         const json = await res.json();
+
+//         if (json.success && json.signals) {
+//           setMqttSignals(json.signals.filter((s) => s.active));
+//         }
+//       } catch (err) {
+//         console.error("Signal Load Error:", err);
+//       }
+//     };
+
+//     fetchSignals();
+//   }, [stageNumber]);
+
+//   /* ================= ANIMATION STYLES ================= */
+//   useEffect(() => {
+//     const style = document.createElement("style");
+//     style.innerHTML = `
+//       @keyframes fullScreenFlashRed {
+//         0% { background-color: #000; }
+//         50% { background-color: #330000; }
+//         100% { background-color: #000; }
+//       }
+
+//       @keyframes fullScreenPulseGreen {
+//         0% { background-color: #000; }
+//         50% { background-color: #002200; }
+//         100% { background-color: #000; }
+//       }
+//     `;
+//     document.head.appendChild(style);
+//   }, []);
+
+//   const handleVinKeyDown = (e) => {
+//     if (e.key === "Enter") {
+//       const trimmed = vinInput.trim();
+//       if (!trimmed) return;
+
+//       lastVinRef.current = trimmed; // prevent duplicate MQTT call
+//       fetchModelData(trimmed, stageNumber);
+//     }
+//   };
+
+//   const getRootStyle = () => {
+//     let baseStyle = { ...styles.root };
+
+//     if (showResult) {
+//       if (finalStatus === "PASS") {
+//         baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+//       } else {
+//         baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+//       }
+//     }
+
+//     return baseStyle;
+//   };
+
+//   /* ================= SIGNAL DETECTION ================= */
+
+//   const vinSignal = mqttSignals.find((s) =>
+//     s.topic?.toLowerCase().includes("engineno"),
+//   );
+
+//   /* ================= GENERIC MQTT LISTENER ================= */
+
+//   /* ================= VIN LISTENER ================= */
+
+//   useEffect(() => {
+//     if (!stageNumber) return;
+
+//     if (mqttClientRef.current) {
+//       mqttClientRef.current.end(true);
+//     }
+
+//     const client = mqtt.connect("ws://192.168.29.61:9001", {
+//       reconnectPeriod: 3000,
+//       clean: true,
+//     });
+
+//     mqttClientRef.current = client;
+
+//     client.on("connect", () => {
+//       console.log("MQTT Connected ✅");
+//       setMqttConnected(true);
+
+//       if (vinSignal?.topic) {
+//         client.subscribe(vinSignal.topic);
+//       }
+
+//       client.subscribe(torqueTopic);
+//       client.subscribe(angleTopic);
+//       client.subscribe(prePitchTopic);
+//     });
+
+//     client.on("message", (topic, message) => {
+//       const payload = message.toString();
+
+//       /* ===== VIN ===== */
+//       if (topic === vinTopicRef.current) {
+//         const vin = payload.trim();
+
+//         if (!vin) return;
+//         if (lastVinRef.current === vin) return;
+
+//         lastVinRef.current = vin;
+//         setVinInput(vin);
+//         fetchModelData(vin, stageNumber);
+//       }
+
+//       /* ===== Torque ===== */
+//       if (topic === torqueTopic) {
+//         const value = Number(payload);
+//         if (!isNaN(value)) {
+//           setLiveTorque(value);
+//         }
+//       }
+
+//       /* ===== Angle ===== */
+//       if (topic === angleTopic) {
+//         const value = Number(payload);
+//         if (!isNaN(value)) {
+//           setLiveAngle(value);
+//         }
+//       }
+
+//       if (topic === prePitchTopic) {
+//         const value = Number(payload);
+
+//         if (!isNaN(value)) {
+//           setPrePitch(value);
+//           console.log("PrePitch received from DataLogger:", value);
+//         }
+//       }
+//     });
+
+//     client.on("close", () => {
+//       if (!client.connected) {
+//         console.log("MQTT Disconnected ❌");
+//         setMqttConnected(false);
+//       }
+//     });
+
+//     client.on("offline", () => {
+//       console.log("MQTT Offline ❌");
+//       setMqttConnected(false);
+//     });
+
+//     client.on("error", (err) => {
+//       console.error("MQTT Error:", err);
+//       setMqttConnected(false);
+//     });
+
+//     client.on("reconnect", () => {
+//       console.log("MQTT Reconnecting...");
+//     });
+
+//     return () => {
+//       client.end();
+//     };
+//   }, [stageNumber]);
+
+
+//   useEffect(() => {
+//   if (!vinSignal?.topic) return;
+
+//   vinTopicRef.current = vinSignal.topic;
+
+//   if (mqttClientRef.current) {
+//     mqttClientRef.current.subscribe(vinSignal.topic);
+//     console.log("Subscribed to VIN topic:", vinSignal.topic);
+//   }
+// }, [vinSignal]);
+
+//   /* ================= TIGHTENING LISTENER ================= */
+
+//   /* ================= PASS / FAIL LOGIC ================= */
+
+//   useEffect(() => {
+//     if (
+//       minTorque === "-" ||
+//       maxTorque === "-" ||
+//       liveTorque <= 0 ||
+//       !mqttClientRef.current
+//     ) {
+//       return;
+//     }
+
+//     const pass =
+//       liveTorque >= Number(minTorque) && liveTorque <= Number(maxTorque);
+
+//     const result = pass ? "OK" : "NOT_OK";
+
+//     setFinalStatus(pass ? "PASS" : "FAIL");
+//     setShowResult(true);
+//     setShowTorqueValue(true);
+
+//     // 🔹 CASE 1 → Before PrePitch
+//     if (prePitch === 0) {
+//       if (pass) {
+//         mqttClientRef.current.publish(resultTopic, "1");
+//         console.log("Published OK before PrePitch");
+//       }
+//       return;
+//     }
+
+//     // 🔹 CASE 2 → After PrePitch
+//     if (prePitch === 1) {
+//       mqttClientRef.current.publish(resultTopic, result);
+//       console.log("Published After PrePitch:", result);
+//     }
+//   }, [liveTorque, prePitch]);
+//   /* ================= FETCH MODEL DATA ================= */
+
+//   const fetchModelData = async (vin_no, stage_no) => {
+//     setFinalStatus(null);
+//     setLiveTorque(0);
+//     setLiveAngle(0);
+//     setShowResult(false);
+//     setShowTorqueValue(false);
+//     setPrePitch(0);
+//     setResultPublished(false);
+
+//     try {
+//       const res = await fetch(API_URL, {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({
+//           vin_no,
+//           stage_no,
+//         }),
+//       });
+
+//       const json = await res.json();
+//       if (!json) return;
+
+//       const recipeProcess = json.recipeProcess?.[0];
+
+//       setModelName(json.model?.model_name ?? "-");
+//       setModelSku(json.model?.model_code ?? "-");
+
+//       setStageName(json.routeStep?.stage_name ?? "-");
+
+//       setMinTorque(recipeProcess?.lsl ?? "-");
+//       setMaxTorque(recipeProcess?.usl ?? "-");
+//     } catch (err) {
+//       console.error("Model fetch failed", err);
+//     }
+//   };
+
+//   const formatDate = now.toLocaleDateString("en-GB");
+//   const formatTime = now.toLocaleTimeString("en-US", {
+//     hour: "2-digit",
+//     minute: "2-digit",
+//     hour12: true,
+//   });
+
+//   if (isInvalidStage) {
+//     return <div>Invalid Stage Number</div>;
+//   }
+
+//   return (
+//     <div style={getRootStyle()}>
+//       {/* ================= HEADER ================= */}
+//       <div style={styles.header}>
+//         <img src="/Hero.svg" alt="Hero Logo" style={styles.heroLogo} />
+//         <div style={styles.headerPill}>
+//           <div style={styles.headerTitle}>DC TOOL TIGHTENING</div>
+//         </div>
+//         <img
+//           src="/operatex.png"
+//           alt="OperateX Logo"
+//           style={styles.operatexLogo}
+//         />
+//       </div>
+
+//       {/* ================= MODEL ROW ================= */}
+//       <div style={styles.modelRow}>
+//         <div style={styles.modelText}>
+//           Model: <span style={styles.modelValue}>{modelName}</span>
+//         </div>
+//         <div
+//           style={{
+//             ...styles.mqtt,
+//             color: mqttConnected ? "#00ff00" : "#ff0033",
+//           }}
+//         >
+//           {mqttConnected ? "MQTT Connected" : "MQTT Disconnected"}
+//         </div>
+//       </div>
+
+//       {/* ================= LINE STATUS ================= */}
+//       <div style={styles.lineStatusRow}>
+//         <div style={styles.lineStatusLeft}>
+//           <span style={styles.lineStatusTitle}>LINE STATUS :</span>
+//           <span
+//             style={{
+//               ...styles.lineStatusValue,
+//               color: lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000df",
+//             }}
+//           >
+//             {lineStatus}
+//           </span>
+//         </div>
+
+//         <div style={styles.lineStatusRight}>
+//           <span
+//             style={{
+//               ...styles.lineActive,
+//               opacity: operationMode === "AUTO" ? 1 : 0.3,
+//             }}
+//           >
+//             AUTO
+//           </span>
+//           <span style={styles.lineSeparator}>|</span>
+//           <span
+//             style={{
+//               ...styles.lineManual,
+//               opacity: operationMode === "MANUAL" ? 1 : 0.3,
+//             }}
+//           >
+//             MANUAL
+//           </span>
+//         </div>
+//       </div>
+
+//       {/* ================= BODY ================= */}
+//       <div style={styles.body}>
+//         {/* LEFT PANEL */}
+//         <div style={styles.leftPanel}>
+//           <div style={styles.circleRow}>
+//             <div style={styles.circleOuter}>
+//               <div style={styles.circleInner}>
+//                 <div style={styles.circleValue}>{stageNo}</div>
+//               </div>
+//               <div style={styles.circleLabel}>
+//                 Stage
+//                 <br />
+//                 Number
+//               </div>
+//             </div>
+
+//             <div style={styles.stageNameBox}>
+//               <div style={styles.stageNameText}>{stageName}</div>
+//               <div style={styles.stageNameLabel}>
+//                 Stage
+//                 <br /> Name
+//               </div>
+//             </div>
+//           </div>
+
+//           <div style={styles.dateTimeBlock}>
+//             <div style={styles.dateTimeRow}>
+//               <div style={styles.dateTimeLabel}>DATE</div>
+//               <div style={styles.dateTimeValue}>{formatDate}</div>
+//             </div>
+//             <div style={styles.dateTimeRow}>
+//               <div style={styles.dateTimeLabel}>TIME</div>
+//               <div style={styles.dateTimeValue}>{formatTime}</div>
+//             </div>
+//           </div>
+//         </div>
+
+//         {/* TORQUE LIMIT */}
+//         <div style={styles.torqueLimits}>
+//           <div style={styles.torqueBox}>
+//             <div style={styles.torqueValue}>{minTorque}</div>
+//             <div style={styles.torqueLabel}>
+//               MINIMUM
+//               <br />
+//               TORQUE
+//             </div>
+//           </div>
+//           <div style={styles.torqueDivider} />
+//           <div style={styles.torqueBox}>
+//             <div style={styles.torqueValue}>{maxTorque}</div>
+//             <div style={styles.torqueLabel}>
+//               MAXIMUM
+//               <br />
+//               TORQUE
+//             </div>
+//           </div>
+//         </div>
+
+//         {/* RIGHT PANEL */}
+//         <div style={styles.rightPanel}>
+//           <input
+//             style={styles.vinBox}
+//             placeholder="ENTER VIN & PRESS ENTER"
+//             value={vinInput}
+//             onChange={(e) => {
+//               setVinInput(e.target.value);
+//               setShowResult(false);
+//               setShowTorqueValue(false);
+//             }}
+//             onKeyDown={handleVinKeyDown}
+//           />
+
+//           <div style={styles.skuBlock}>
+//             <div style={styles.skuRow}>
+//               <div style={styles.skuText}>
+//                 SKU - <span style={styles.yellow}>{modelSku}</span>
+//               </div>
+//             </div>
+
+//             <div style={styles.angleRow}>
+//               ANGLE -{" "}
+//               {showTorqueValue && (
+//                 <span style={styles.yellow}>{liveAngle}°</span>
+//               )}
+//             </div>
+//           </div>
+
+//           <div style={styles.torqueDisplay}>
+//             <div
+//               style={{
+//                 fontSize: 80,
+//                 fontWeight: "bold",
+//                 color: isTorqueOk ? "#00ff00" : "#ff0033",
+//                 textAlign: "center",
+//                 width: "100%",
+//                 textShadow: isTorqueOk
+//                   ? "0 0 15px #00ff00"
+//                   : "0 0 15px #ff0033",
+//                 ...(showResult ? styles.blinkText : {}),
+//               }}
+//             >
+//               {showResult && finalStatus}
+//             </div>
+//           </div>
+
+//           <div style={styles.torqueText}>
+//             {showTorqueValue && (
+//               <div style={{ fontSize: 60, fontWeight: "bold" }}>
+//                 {liveTorque} Nm
+//               </div>
+//             )}
+//             TORQUE
+//             <br />
+//             VALUE
+//           </div>
+//         </div>
+//       </div>
+//       {/* FOOTER */}
+//       <div style={styles.footer}>
+//         Powered by{" "}
+//         <span style={styles.footerHighlight}>OperateX Thetavega</span>
+//       </div>
+//     </div>
+//   );
+// };
+
+// const styles = {
+//   root: {
+//     width: "100vw",
+//     height: "100vh",
+//     background: "#000",
+//     color: "#fff",
+//     fontFamily: "Segoe UI, Arial, sans-serif",
+//     border: "8px solid #00c3ff",
+//     outline: "2px solid #0099cc",
+//     outlineOffset: -8,
+//     boxSizing: "border-box",
+//   },
+
+//   header: {
+//     height: 80,
+//     display: "flex",
+//     alignItems: "center",
+//     justifyContent: "center",
+//     position: "relative",
+//   },
+
+//   heroLogo: {
+//     position: "absolute",
+//     left: 23,
+//     height: 55,
+//     objectFit: "contain",
+//   },
+
+//   operatexLogo: {
+//     position: "absolute",
+//     right: 23,
+//     top: "60%",
+//     transform: "translateY(-50%)",
+//     height: 155,
+//     objectFit: "contain",
+//   },
+
+//   blinkText: {
+//     animation: "blink 3s infinite",
+//   },
+
+//   headerPill: {
+//     width: "100%",
+//     background: "#fff",
+//     borderRadius: "0 0 22px 22px",
+//     padding: "12px 0",
+//     textAlign: "center",
+//   },
+
+//   headerTitle: {
+//     fontSize: 35,
+//     fontWeight: "bold",
+//     color: "#000",
+//   },
+
+//   modelRow: {
+//     display: "flex",
+//     padding: "8px 20px",
+//     borderBottom: "5px solid #222",
+//     marginTop: 20,
+//   },
+
+//   modelText: {
+//     flex: 1,
+//     color: "#ffd000",
+//     fontSize: 38,
+//     fontWeight: "bold",
+//   },
+
+//   modelValue: { fontWeight: "bold" },
+
+//   mqtt: {
+//     color: "#00ff00",
+//     fontSize: 28,
+//     fontWeight: "bold",
+//   },
+
+//   lineStatusRow: {
+//     display: "flex",
+//     justifyContent: "space-between",
+//     alignItems: "center",
+//     padding: "10px 20px",
+//     background: "#111",
+//     borderBottom: "2px solid #222",
+//   },
+
+//   lineStatusLeft: {
+//     display: "flex",
+//     alignItems: "center",
+//   },
+
+//   lineStatusTitle: {
+//     fontSize: 32,
+//     color: "#00c3ff",
+//     marginRight: 10,
+//     fontWeight: "bold",
+//   },
+
+//   lineStatusValue: {
+//     fontSize: 32,
+//     fontWeight: "bold",
+//   },
+
+//   lineStatusRight: {
+//     display: "flex",
+//     alignItems: "center",
+//     fontSize: 28,
+//     fontWeight: "bold",
+//   },
+
+//   lineActive: { color: "#00ff00" },
+//   lineManual: { color: "#ffd000" },
+//   lineSeparator: { margin: "0 10px", color: "#888" },
+
+//   body: {
+//     display: "flex",
+//     padding: "20px 0",
+//     gap: 20,
+//   },
+
+//   leftPanel: {
+//     width: 500,
+//     border: "10px solid #b400ff",
+//     borderRadius: 16,
+//     padding: 16,
+//     height: 500,
+//   },
+
+//   circleRow: {
+//     display: "flex",
+//     justifyContent: "center",
+//     alignItems: "center",
+//     gap: 80,
+//     marginTop: 20,
+//   },
+
+//   circleOuter: { textAlign: "center" },
+
+//   circleInner: {
+//     width: 130,
+//     height: 130,
+//     borderRadius: "60%",
+//     border: "8px solid #00ff00",
+//     outline: "8px solid #b400ff",
+//     outlineOffset: 5,
+//     display: "flex",
+//     justifyContent: "center",
+//     alignItems: "center",
+//   },
+
+//   circleValue: {
+//     fontSize: 46,
+//     color: "#ffd000",
+//     fontWeight: "bold",
+//   },
+
+//   circleLabel: {
+//     marginTop: 12,
+//     fontSize: 23,
+//     fontWeight: "bold",
+//   },
+
+//   stageNameBox: {
+//     display: "flex",
+//     flexDirection: "column",
+//     alignItems: "center", // 🔥 center align like circle
+//     justifyContent: "center",
+//     textAlign: "center",
+//   },
+
+//   stageNameText: {
+//     fontSize: 28,
+//     fontWeight: "bold",
+//     color: "#00d4ff",
+//     letterSpacing: 1,
+//   },
+
+//   stageNameLabel: {
+//     fontSize: 23,
+//     fontWeight: "bold",
+//     marginTop: 23,
+//   },
+
+//   dateTimeBlock: {
+//     marginTop: 100,
+//     display: "flex",
+//     flexDirection: "column",
+//     gap: 16,
+//   },
+
+//   dateTimeRow: {
+//     display: "flex",
+//     gap: 30,
+//     alignItems: "center",
+//   },
+
+//   dateTimeLabel: {
 //     background: "#fff",
 //     color: "#000",
-//     padding: "6px 18px",
-//     borderRadius: 20,
-
-//     marginTop: 10,
-//     marginLeft: 250,
+//     padding: "6px 14px",
+//     borderRadius: 6,
+//     fontWeight: "bold",
+//     fontSize: 20,
 //   },
+
+//   dateTimeValue: {
+//     fontSize: 34,
+//     fontWeight: "bold",
+//   },
+
+//   torqueLimits: {
+//     width: 180,
+//     display: "flex",
+//     flexDirection: "column",
+//     alignItems: "center",
+//     justifyContent: "center",
+//   },
+
+//   torqueBox: { textAlign: "center" },
+
+//   torqueValue: {
+//     fontSize: 60,
+//     color: "#ffd000",
+//     fontWeight: "bold",
+//   },
+
+//   torqueLabel: { fontSize: 16 },
+
+//   torqueDivider: {
+//     height: 2,
+//     width: "80%",
+//     background: "#ff8000df",
+//     margin: "20px 0",
+//     border: "5px solid #ff8000df",
+//   },
+
+//   rightPanel: {
+//     flex: 1,
+//     border: "10px solid #00c3ff",
+//     padding: 10,
+//     borderRadius: 16,
+//   },
+
+//   vinBox: {
+//     background: "#fff",
+//     color: "#000",
+//     fontSize: 40,
+//     fontWeight: "bold",
+//     padding: 10,
+//     borderRadius: 20,
+//     marginBottom: 15,
+//     width: "100%",
+//   },
+
+//   skuBlock: {
+//     display: "flex",
+//     flexDirection: "column",
+//     gap: 10,
+//   },
+
+//   skuRow: {
+//     display: "flex",
+//     gap: 25,
+//     fontSize: 40,
+//   },
+
+//   skuText: { color: "#fff" },
+//   yellow: { color: "#ffd000", fontWeight: "bold" },
 
 //   angleRow: {
 //     fontSize: 40,
@@ -947,7 +1588,7 @@
 //   torqueDisplay: {
 //     height: 150,
 //     width: 420,
-//     border: "4px solid #00ff00",
+//     border: "10px solid #00ff00",
 //     borderRadius: 20,
 //     marginTop: 14,
 //     display: "flex",
@@ -955,10 +1596,854 @@
 //     padding: 10,
 //   },
 
-//   torqueIndicator: {
-//     width: 20,
-//     height: 12,
-//     background: "#00ff00",
+//   torqueText: {
+//     color: "#ffd000",
+//     fontSize: 20,
+//     textAlign: "right",
+//     width: "100%",
+//     paddingRight: 180,
+//     marginTop: -150,
+//   },
+
+//   footer: {
+//     position: "absolute",
+//     bottom: 0,
+//     left: 0,
+//     width: "100%",
+//     background: "#ff8000",
+//     color: "#000",
+//     textAlign: "center",
+//     fontSize: 17,
+//     fontWeight: "bold",
+//     padding: "8px 0",
+//     letterSpacing: 1,
+//     boxShadow: "0 -2px 10px rgba(0,0,0,0.6)",
+//     zIndex: 1000,
+//   },
+
+//   footerHighlight: {
+//     fontWeight: "bold",
+//   },
+// };
+
+// export default DCToolHMI;
+
+
+
+
+
+
+
+// Final code without DB insert and rest all is been done
+// import React, { useEffect, useState, useRef } from "react";
+// import { useParams } from "react-router-dom";
+// import mqtt from "mqtt";
+
+// const API_URL = "http://192.168.1.15:5003/api/vin/get-model-by-vin";
+// const MQTT_SIGNAL_API = "http://192.168.1.15:5003/api/mqtt-signal/by-stage-no";
+
+// const DCToolHMI = () => {
+//   const [now, setNow] = useState(new Date());
+
+//   /* ================= STAGE ================= */
+//   const { stageNo } = useParams();
+//   const stageNumber = parseInt(stageNo, 10);
+//   const isInvalidStage = isNaN(stageNumber);
+//   const torqueTopic = `ST${stageNumber}_Torque`;
+//   const angleTopic = `ST${stageNumber}_Angle`;
+//   const resultTopic = `ST${stageNumber}_Result`;
+//   const prePitchTopic = "PrePitch";
+
+//   /* ================= SYSTEM STATES ================= */
+//   const [operationMode, setOperationMode] = useState("AUTO");
+//   const [lineStatus, setLineStatus] = useState("INTERLOCKED");
+
+//   /* ================= API DATA STATES ================= */
+//   const [vinInput, setVinInput] = useState("");
+//   const [modelName, setModelName] = useState("-");
+//   const [modelSku, setModelSku] = useState("-");
+//   const [minTorque, setMinTorque] = useState("-");
+//   const [maxTorque, setMaxTorque] = useState("-");
+//   const [showResult, setShowResult] = useState(false);
+//   const [showTorqueValue, setShowTorqueValue] = useState(false);
+//   const [liveTorque, setLiveTorque] = useState(0);
+//   const [liveAngle, setLiveAngle] = useState(0);
+//   const [finalStatus, setFinalStatus] = useState(null);
+//   const [stageName, setStageName] = useState("-");
+//   const mqttClientRef = useRef(null);
+//   const [prePitch, setPrePitch] = useState(0);
+//   const [resultPublished, setResultPublished] = useState(false);
+//   const [mqttConnected, setMqttConnected] = useState(false);
+
+//   const [mqttSignals, setMqttSignals] = useState([]);
+//   const lastVinRef = useRef(null);
+//   const vinTopicRef = useRef(null);
+
+//   /* ================= OK / NOT OK LOGIC ================= */
+//   const isTorqueOk =
+//     minTorque !== "-" &&
+//     maxTorque !== "-" &&
+//     liveTorque >= Number(minTorque) &&
+//     liveTorque <= Number(maxTorque);
+
+//   /* ================= CLOCK ================= */
+//   useEffect(() => {
+//     const timer = setInterval(() => setNow(new Date()), 1000);
+//     return () => clearInterval(timer);
+//   }, []);
+
+//   /* ================= LOAD MQTT SIGNALS ================= */
+//   useEffect(() => {
+//     if (isInvalidStage) return;
+
+//     const fetchSignals = async () => {
+//       try {
+//         const res = await fetch(`${MQTT_SIGNAL_API}/${stageNumber}`);
+//         const json = await res.json();
+
+//         if (json.success && json.signals) {
+//           setMqttSignals(json.signals.filter((s) => s.active));
+//         }
+//       } catch (err) {
+//         console.error("Signal Load Error:", err);
+//       }
+//     };
+
+//     fetchSignals();
+//   }, [stageNumber]);
+
+//   /* ================= ANIMATION STYLES ================= */
+//   useEffect(() => {
+//     const style = document.createElement("style");
+//     style.innerHTML = `
+//       @keyframes fullScreenFlashRed {
+//         0% { background-color: #000; }
+//         50% { background-color: #330000; }
+//         100% { background-color: #000; }
+//       }
+
+//       @keyframes fullScreenPulseGreen {
+//         0% { background-color: #000; }
+//         50% { background-color: #002200; }
+//         100% { background-color: #000; }
+//       }
+//     `;
+//     document.head.appendChild(style);
+//   }, []);
+
+//   const handleVinKeyDown = (e) => {
+//     if (e.key === "Enter") {
+//       const trimmed = vinInput.trim();
+//       if (!trimmed) return;
+
+//       lastVinRef.current = trimmed; // prevent duplicate MQTT call
+//       fetchModelData(trimmed, stageNumber);
+//     }
+//   };
+
+//   const getRootStyle = () => {
+//     let baseStyle = { ...styles.root };
+
+//     if (showResult) {
+//       if (finalStatus === "PASS") {
+//         baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+//       } else {
+//         baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+//       }
+//     }
+
+//     return baseStyle;
+//   };
+
+//   /* ================= SIGNAL DETECTION ================= */
+
+//   const vinSignal = mqttSignals.find((s) =>
+//     s.topic?.toLowerCase().includes("engineno"),
+//   );
+
+//   /* ================= GENERIC MQTT LISTENER ================= */
+
+//   /* ================= VIN LISTENER ================= */
+
+//   useEffect(() => {
+//     if (!stageNumber) return;
+
+//     if (mqttClientRef.current) {
+//       mqttClientRef.current.end(true);
+//     }
+
+//     const client = mqtt.connect("ws://192.168.1.15:9001", {
+//       reconnectPeriod: 3000,
+//       clean: true,
+//     });
+
+//     mqttClientRef.current = client;
+
+//     client.on("connect", () => {
+//       console.log("MQTT Connected ✅");
+//       setMqttConnected(true);
+
+//       if (vinSignal?.topic) {
+//         client.subscribe(vinSignal.topic);
+//       }
+
+//       client.subscribe(torqueTopic);
+//       client.subscribe(angleTopic);
+//       client.subscribe(prePitchTopic);
+//     });
+
+//     client.on("message", (topic, message) => {
+//       const payload = message.toString();
+
+//       /* ===== VIN ===== */
+//       if (topic === vinTopicRef.current) {
+//         const vin = payload.trim();
+
+//         if (!vin) return;
+//         if (lastVinRef.current === vin) return;
+
+//         lastVinRef.current = vin;
+//         setVinInput(vin);
+//         fetchModelData(vin, stageNumber);
+//       }
+
+//       /* ===== Torque ===== */
+//       if (topic === torqueTopic) {
+//         const value = Number(payload);
+//         if (!isNaN(value)) {
+//           setLiveTorque(value);
+//         }
+//       }
+
+//       /* ===== Angle ===== */
+//       if (topic === angleTopic) {
+//         const value = Number(payload);
+//         if (!isNaN(value)) {
+//           setLiveAngle(value);
+//         }
+//       }
+
+//       if (topic === prePitchTopic) {
+//         const value = Number(payload);
+
+//         if (!isNaN(value)) {
+//           setPrePitch(value);
+//           console.log("PrePitch received from DataLogger:", value);
+//         }
+//       }
+//     });
+
+//     client.on("close", () => {
+//       if (!client.connected) {
+//         console.log("MQTT Disconnected ❌");
+//         setMqttConnected(false);
+//       }
+//     });
+
+//     client.on("offline", () => {
+//       console.log("MQTT Offline ❌");
+//       setMqttConnected(false);
+//     });
+
+//     client.on("error", (err) => {
+//       console.error("MQTT Error:", err);
+//       setMqttConnected(false);
+//     });
+
+//     client.on("reconnect", () => {
+//       console.log("MQTT Reconnecting...");
+//     });
+
+//     return () => {
+//       client.end();
+//     };
+//   }, [stageNumber]);
+
+
+//   useEffect(() => {
+//   if (!vinSignal?.topic) return;
+
+//   vinTopicRef.current = vinSignal.topic;
+
+//   if (mqttClientRef.current) {
+//     mqttClientRef.current.subscribe(vinSignal.topic);
+//     console.log("Subscribed to VIN topic:", vinSignal.topic);
+//   }
+// }, [vinSignal]);
+
+//   /* ================= TIGHTENING LISTENER ================= */
+
+//   /* ================= PASS / FAIL LOGIC ================= */
+
+//   useEffect(() => {
+//     if (
+//       minTorque === "-" ||
+//       maxTorque === "-" ||
+//       liveTorque <= 0 ||
+//       !mqttClientRef.current
+//     ) {
+//       return;
+//     }
+
+//     const pass =
+//       liveTorque >= Number(minTorque) && liveTorque <= Number(maxTorque);
+
+//     const result = pass ? "1" : "0";
+
+//     setFinalStatus(pass ? "PASS" : "FAIL");
+//     setShowResult(true);
+//     setShowTorqueValue(true);
+
+//     // 🔹 CASE 1 → Before PrePitch
+//     if (prePitch === 0) {
+//       if (pass) {
+//         mqttClientRef.current.publish(resultTopic, "1");
+//         console.log("Published OK before PrePitch");
+//       }
+//       return;
+//     }
+
+//     // 🔹 CASE 2 → After PrePitch
+//     if (prePitch === 1) {
+//       mqttClientRef.current.publish(resultTopic, result);
+//       console.log("Published After PrePitch:", result);
+//     }
+//   }, [liveTorque, prePitch]);
+//   /* ================= FETCH MODEL DATA ================= */
+
+//   const fetchModelData = async (vin_no, stage_no) => {
+//     setFinalStatus(null);
+//     setLiveTorque(0);
+//     setLiveAngle(0);
+//     setShowResult(false);
+//     setShowTorqueValue(false);
+//     setPrePitch(0);
+//     setResultPublished(false);
+
+//     try {
+//       const res = await fetch(API_URL, {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({
+//           vin_no,
+//           stage_no,
+//         }),
+//       });
+
+//       const json = await res.json();
+//       if (!json) return;
+
+//       const recipeProcess = json.recipeProcess?.[0];
+
+//       setModelName(json.model?.model_name ?? "-");
+//       setModelSku(json.model?.model_code ?? "-");
+
+//       setStageName(json.routeStep?.stage_name ?? "-");
+
+//       setMinTorque(recipeProcess?.lsl ?? "-");
+//       setMaxTorque(recipeProcess?.usl ?? "-");
+//     } catch (err) {
+//       console.error("Model fetch failed", err);
+//     }
+//   };
+
+
+//     /* ================= PASS / FAIL + TORQUE SECTION COMPONENT ================= */
+
+//   const TorqueResultSection = () => {
+//     return (
+//       <>
+//         {/* ===== PASS / FAIL DISPLAY ===== */}
+//         <div style={styles.torqueDisplay}>
+//           <div
+//             style={{
+//               fontSize: 80,
+//               fontWeight: "bold",
+//               color: isTorqueOk ? "#00ff00" : "#ff0033",
+//               textAlign: "center",
+//               width: "100%",
+//               textShadow: isTorqueOk
+//                 ? "0 0 15px #00ff00"
+//                 : "0 0 15px #ff0033",
+//               ...(showResult ? styles.blinkText : {}),
+//             }}
+//           >
+//             {showResult && finalStatus}
+//           </div>
+//         </div>
+
+//         {/* ===== TORQUE VALUE DISPLAY ===== */}
+//         <div style={styles.torqueText}>
+//           {showTorqueValue && (
+//             <div style={{ fontSize: 60, fontWeight: "bold", marginTop: "10" }}>
+//               {liveTorque} Nm
+//             </div>
+//           )}
+//           TORQUE
+//           <br />
+//           VALUE
+//         </div>
+//       </>
+//     );
+//   };
+
+//   const formatDate = now.toLocaleDateString("en-GB");
+//   const formatTime = now.toLocaleTimeString("en-US", {
+//     hour: "2-digit",
+//     minute: "2-digit",
+//     hour12: true,
+//   });
+
+//   if (isInvalidStage) {
+//     return <div>Invalid Stage Number</div>;
+//   }
+
+//   return (
+//     <div style={getRootStyle()}>
+//       {/* ================= HEADER ================= */}
+//       <div style={styles.header}>
+//         <img src="/Hero.svg" alt="Hero Logo" style={styles.heroLogo} />
+//         <div style={styles.headerPill}>
+//           <div style={styles.headerTitle}>DC TOOL TIGHTENING</div>
+//         </div>
+//         <img
+//           src="/operatex.png"
+//           alt="OperateX Logo"
+//           style={styles.operatexLogo}
+//         />
+//       </div>
+
+//       {/* ================= MODEL ROW ================= */}
+//       <div style={styles.modelRow}>
+//         <div style={styles.modelText}>
+//           Model: <span style={styles.modelValue}>{modelName}</span>
+//         </div>
+//         <div
+//           style={{
+//             ...styles.mqtt,
+//             color: mqttConnected ? "#00ff00" : "#ff0033",
+//           }}
+//         >
+//           {mqttConnected ? "MQTT Connected" : "MQTT Disconnected"}
+//         </div>
+//       </div>
+
+//       {/* ================= LINE STATUS ================= */}
+//       <div style={styles.lineStatusRow}>
+//         <div style={styles.lineStatusLeft}>
+//           <span style={styles.lineStatusTitle}>LINE STATUS :</span>
+//           <span
+//             style={{
+//               ...styles.lineStatusValue,
+//               color: lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000df",
+//             }}
+//           >
+//             {lineStatus}
+//           </span>
+//         </div>
+
+//         <div style={styles.lineStatusRight}>
+//           <span
+//             style={{
+//               ...styles.lineActive,
+//               opacity: operationMode === "AUTO" ? 1 : 0.3,
+//             }}
+//           >
+//             AUTO
+//           </span>
+//           <span style={styles.lineSeparator}>|</span>
+//           <span
+//             style={{
+//               ...styles.lineManual,
+//               opacity: operationMode === "MANUAL" ? 1 : 0.3,
+//             }}
+//           >
+//             MANUAL
+//           </span>
+//         </div>
+//       </div>
+
+//       {/* ================= BODY ================= */}
+//       <div style={styles.body}>
+//         {/* LEFT PANEL */}
+//         <div style={styles.leftPanel}>
+//           <div style={styles.circleRow}>
+//             <div style={styles.circleOuter}>
+//               <div style={styles.circleInner}>
+//                 <div style={styles.circleValue}>{stageNo}</div>
+//               </div>
+//               <div style={styles.circleLabel}>
+//                 Stage
+//                 <br />
+//                 Number
+//               </div>
+//             </div>
+
+//             <div style={styles.stageNameBox}>
+//               <div style={styles.stageNameText}>{stageName}</div>
+//               <div style={styles.stageNameLabel}>
+//                 Stage
+//                 <br /> Name
+//               </div>
+//             </div>
+//           </div>
+
+//           <div style={styles.dateTimeBlock}>
+//             <div style={styles.dateTimeRow}>
+//               <div style={styles.dateTimeLabel}>DATE</div>
+//               <div style={styles.dateTimeValue}>{formatDate}</div>
+//             </div>
+//             <div style={styles.dateTimeRow}>
+//               <div style={styles.dateTimeLabel}>TIME</div>
+//               <div style={styles.dateTimeValue}>{formatTime}</div>
+//             </div>
+//           </div>
+//         </div>
+
+//         {/* TORQUE LIMIT */}
+//         <div style={styles.torqueLimits}>
+//           <div style={styles.torqueBox}>
+//             <div style={styles.torqueValue}>{minTorque}</div>
+//             <div style={styles.torqueLabel}>
+//               MINIMUM
+//               <br />
+//               TORQUE
+//             </div>
+//           </div>
+//           <div style={styles.torqueDivider} />
+//           <div style={styles.torqueBox}>
+//             <div style={styles.torqueValue}>{maxTorque}</div>
+//             <div style={styles.torqueLabel}>
+//               MAXIMUM
+//               <br />
+//               TORQUE
+//             </div>
+//           </div>
+//         </div>
+
+//         {/* RIGHT PANEL */}
+//         <div style={styles.rightPanel}>
+//           <input
+//             style={styles.vinBox}
+//             placeholder="ENTER VIN"
+//             value={vinInput}
+//             onChange={(e) => {
+//               setVinInput(e.target.value);
+//               setShowResult(false);
+//               setShowTorqueValue(false);
+//             }}
+//             onKeyDown={handleVinKeyDown}
+//           />
+
+//           <div style={styles.skuBlock}>
+//             <div style={styles.skuRow}>
+//               <div style={styles.skuText}>
+//                 SKU - <span style={styles.yellow}>{modelSku}</span>
+//               </div>
+//             </div>
+
+//             <div style={styles.angleRow}>
+//               ANGLE -{" "}
+//               {showTorqueValue && (
+//                 <span style={styles.yellow}>{liveAngle}°</span>
+//               )}
+//             </div>
+//           </div>
+
+//           <TorqueResultSection />
+//         </div>
+//       </div>
+//       {/* FOOTER */}
+//       <div style={styles.footer}>
+//         Powered by{" "}
+//         <span style={styles.footerHighlight}>OperateX Thetavega</span>
+//       </div>
+//     </div>
+//   );
+// };
+
+// const styles = {
+//   root: {
+//     width: "100vw",
+//     height: "100vh",
+//     background: "#000",
+//     color: "#fff",
+//     fontFamily: "Segoe UI, Arial, sans-serif",
+//     border: "8px solid #00c3ff",
+//     outline: "2px solid #0099cc",
+//     outlineOffset: -8,
+//     boxSizing: "border-box",
+//   },
+
+//   header: {
+//     height: 80,
+//     display: "flex",
+//     alignItems: "center",
+//     justifyContent: "center",
+//     position: "relative",
+//   },
+
+//   heroLogo: {
+//     position: "absolute",
+//     left: 23,
+//     height: 55,
+//     objectFit: "contain",
+//   },
+
+//   operatexLogo: {
+//     position: "absolute",
+//     right: 23,
+//     top: "60%",
+//     transform: "translateY(-50%)",
+//     height: 155,
+//     objectFit: "contain",
+//   },
+
+//   blinkText: {
+//     animation: "blink 3s infinite",
+//   },
+
+//   headerPill: {
+//     width: "100%",
+//     background: "#fff",
+//     borderRadius: "0 0 22px 22px",
+//     padding: "12px 0",
+//     textAlign: "center",
+//   },
+
+//   headerTitle: {
+//     fontSize: 35,
+//     fontWeight: "bold",
+//     color: "#000",
+//   },
+
+//   modelRow: {
+//     display: "flex",
+//     padding: "8px 20px",
+//     borderBottom: "5px solid #222",
+//     marginTop: 20,
+//   },
+
+//   modelText: {
+//     flex: 1,
+//     color: "#ffd000",
+//     fontSize: 38,
+//     fontWeight: "bold",
+//   },
+
+//   modelValue: { fontWeight: "bold" },
+
+//   mqtt: {
+//     color: "#00ff00",
+//     fontSize: 28,
+//     fontWeight: "bold",
+//   },
+
+//   lineStatusRow: {
+//     display: "flex",
+//     justifyContent: "space-between",
+//     alignItems: "center",
+//     padding: "10px 20px",
+//     background: "#111",
+//     borderBottom: "2px solid #222",
+//   },
+
+//   lineStatusLeft: {
+//     display: "flex",
+//     alignItems: "center",
+//   },
+
+//   lineStatusTitle: {
+//     fontSize: 32,
+//     color: "#00c3ff",
+//     marginRight: 10,
+//     fontWeight: "bold",
+//   },
+
+//   lineStatusValue: {
+//     fontSize: 32,
+//     fontWeight: "bold",
+//   },
+
+//   lineStatusRight: {
+//     display: "flex",
+//     alignItems: "center",
+//     fontSize: 28,
+//     fontWeight: "bold",
+//   },
+
+//   lineActive: { color: "#00ff00" },
+//   lineManual: { color: "#ffd000" },
+//   lineSeparator: { margin: "0 10px", color: "#888" },
+
+//   body: {
+//     display: "flex",
+//     padding: "20px 0",
+//     gap: 20,
+//   },
+
+//   leftPanel: {
+//     width: 500,
+//     border: "10px solid #b400ff",
+//     borderRadius: 16,
+//     padding: 16,
+//     height: 500,
+//   },
+
+//   circleRow: {
+//     display: "flex",
+//     justifyContent: "center",
+//     alignItems: "center",
+//     gap: 80,
+//     marginTop: 20,
+//   },
+
+//   circleOuter: { textAlign: "center" },
+
+//   circleInner: {
+//     width: 130,
+//     height: 130,
+//     borderRadius: "60%",
+//     border: "8px solid #00ff00",
+//     outline: "8px solid #b400ff",
+//     outlineOffset: 5,
+//     display: "flex",
+//     justifyContent: "center",
+//     alignItems: "center",
+//   },
+
+//   circleValue: {
+//     fontSize: 46,
+//     color: "#ffd000",
+//     fontWeight: "bold",
+//   },
+
+//   circleLabel: {
+//     marginTop: 12,
+//     fontSize: 23,
+//     fontWeight: "bold",
+//   },
+
+//   stageNameBox: {
+//     display: "flex",
+//     flexDirection: "column",
+//     alignItems: "center", // 🔥 center align like circle
+//     justifyContent: "center",
+//     textAlign: "center",
+//   },
+
+//   stageNameText: {
+//     fontSize: 28,
+//     fontWeight: "bold",
+//     color: "#00d4ff",
+//     letterSpacing: 1,
+//   },
+
+//   stageNameLabel: {
+//     fontSize: 23,
+//     fontWeight: "bold",
+//     marginTop: 23,
+//   },
+
+//   dateTimeBlock: {
+//     marginTop: 100,
+//     display: "flex",
+//     flexDirection: "column",
+//     gap: 16,
+//   },
+
+//   dateTimeRow: {
+//     display: "flex",
+//     gap: 30,
+//     alignItems: "center",
+//   },
+
+//   dateTimeLabel: {
+//     background: "#fff",
+//     color: "#000",
+//     padding: "6px 14px",
+//     borderRadius: 6,
+//     fontWeight: "bold",
+//     fontSize: 20,
+//   },
+
+//   dateTimeValue: {
+//     fontSize: 34,
+//     fontWeight: "bold",
+//   },
+
+//   torqueLimits: {
+//     width: 180,
+//     display: "flex",
+//     flexDirection: "column",
+//     alignItems: "center",
+//     justifyContent: "center",
+//   },
+
+//   torqueBox: { textAlign: "center" },
+
+//   torqueValue: {
+//     fontSize: 60,
+//     color: "#ffd000",
+//     fontWeight: "bold",
+//   },
+
+//   torqueLabel: { fontSize: 16 },
+
+//   torqueDivider: {
+//     height: 2,
+//     width: "80%",
+//     background: "#ff8000df",
+//     margin: "20px 0",
+//     border: "5px solid #ff8000df",
+//   },
+
+//   rightPanel: {
+//     flex: 1,
+//     border: "10px solid #00c3ff",
+//     padding: 10,
+//     borderRadius: 16,
+//   },
+
+//   vinBox: {
+//     background: "#fff",
+//     color: "#000",
+//     fontSize: 40,
+//     fontWeight: "bold",
+//     padding: 10,
+//     borderRadius: 20,
+//     marginBottom: 15,
+//     width: "100%",
+//   },
+
+//   skuBlock: {
+//     display: "flex",
+//     flexDirection: "column",
+//     gap: 10,
+//   },
+
+//   skuRow: {
+//     display: "flex",
+//     gap: 25,
+//     fontSize: 40,
+//   },
+
+//   skuText: { color: "#fff" },
+//   yellow: { color: "#ffd000", fontWeight: "bold" },
+
+//   angleRow: {
+//     fontSize: 40,
+//   },
+
+//   torqueDisplay: {
+//     height: 150,
+//     width: 420,
+//     border: "10px solid #00ff00",
+//     borderRadius: 20,
+//     marginTop: 14,
+//     display: "flex",
+//     alignItems: "center",
+//     padding: 10,
 //   },
 
 //   torqueText: {
@@ -966,135 +2451,438 @@
 //     fontSize: 20,
 //     textAlign: "right",
 //     width: "100%",
-//     paddingRight: 230,
-//     marginTop: -70,
+//     paddingRight: 180,
+//     marginTop: -150,
+//   },
+
+//   footer: {
+//     position: "absolute",
+//     bottom: 0,
+//     left: 0,
+//     width: "100%",
+//     background: "#ff8000",
+//     color: "#000",
+//     textAlign: "center",
+//     fontSize: 17,
+//     fontWeight: "bold",
+//     padding: "8px 0",
+//     letterSpacing: 1,
+//     boxShadow: "0 -2px 10px rgba(0,0,0,0.6)",
+//     zIndex: 1000,
+//   },
+
+//   footerHighlight: {
+//     fontWeight: "bold",
 //   },
 // };
 
 // export default DCToolHMI;
 
 
-// code with api integrated
-import React, { useEffect, useRef, useState } from "react";
+
+// Code with MQTT publish + DB insert
+import React, { useEffect, useState, useRef } from "react";
+import { useParams } from "react-router-dom";
 import mqtt from "mqtt";
+
+const API_URL = "http://192.168.1.15:5003/api/vin/get-model-by-vin";
+const MQTT_SIGNAL_API = "http://192.168.1.15:5003/api/mqtt-signal/by-stage-no";
+const PROCESS_RESULT_API = "http://192.168.1.15:5003/api/process-result";
 
 const DCToolHMI = () => {
   const [now, setNow] = useState(new Date());
 
-  /* ================= LINE STATES ================= */
+  /* ================= STAGE ================= */
+  const { stageNo } = useParams();
+  const stageNumber = parseInt(stageNo, 10);
+  const isInvalidStage = isNaN(stageNumber);
+  const torqueTopic = `ST${stageNumber}_Torque`;
+  const angleTopic = `ST${stageNumber}_Angle`;
+  const resultTopic = `ST${stageNumber}_Result`;
+  const prePitchTopic = "PrePitch";
+
+  /* ================= SYSTEM STATES ================= */
   const [operationMode, setOperationMode] = useState("AUTO");
   const [lineStatus, setLineStatus] = useState("INTERLOCKED");
 
-  /* ================= DATA FROM API ================= */
-  const [jobData, setJobData] = useState({
-    vin: "",
-    sku: "",
-    model: "",
-    stage: "",
-    side: "",
-    min: 0,
-    max: 0,
-  });
+  /* ================= API DATA STATES ================= */
+  const [vinInput, setVinInput] = useState("");
+  const [modelName, setModelName] = useState("-");
+  const [modelSku, setModelSku] = useState("-");
+  const [minTorque, setMinTorque] = useState("-");
+  const [maxTorque, setMaxTorque] = useState("-");
+  const [showResult, setShowResult] = useState(false);
+  const [showTorqueValue, setShowTorqueValue] = useState(false);
+  const [liveTorque, setLiveTorque] = useState(0);
+  const [liveAngle, setLiveAngle] = useState(0);
+  const [finalStatus, setFinalStatus] = useState(null);
+  const [stageName, setStageName] = useState("-");
+  const mqttClientRef = useRef(null);
+  const [prePitch, setPrePitch] = useState(0);
+  const [resultPublished, setResultPublished] = useState(false);
+  const [mqttConnected, setMqttConnected] = useState(false);
 
-  /* ================= LIVE DATA FROM MQTT ================= */
-  const [liveTorque, setLiveTorque] = useState(null);
-  const [liveAngle, setLiveAngle] = useState(null);
-  const [result, setResult] = useState(null); // OK | NOT_OK
+  const [mqttSignals, setMqttSignals] = useState([]);
+  const lastVinRef = useRef(null);
+  const vinTopicRef = useRef(null);
+  const [alreadyLogged, setAlreadyLogged] = useState(false);
 
-  const mqttRef = useRef(null);
-  const lastPublishedResult = useRef(null);
+  const [unitId, setUnitId] = useState(null);
+const [routeStepId, setRouteStepId] = useState(null);
+const [toolId, setToolId] = useState(null);
+const [programNo, setProgramNo] = useState(null);
+
+  /* ================= OK / NOT OK LOGIC ================= */
+  const isTorqueOk =
+    minTorque !== "-" &&
+    maxTorque !== "-" &&
+    liveTorque >= Number(minTorque) &&
+    liveTorque <= Number(maxTorque);
 
   /* ================= CLOCK ================= */
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  /* ================= FETCH DATA FROM API ================= */
+  /* ================= LOAD MQTT SIGNALS ================= */
   useEffect(() => {
-    const fetchFromApi = async () => {
-      try {
-        const res = await fetch("http://YOUR_API/dc-tool/current");
-        const data = await res.json();
+    if (isInvalidStage) return;
 
-        setJobData({
-          vin: data.vin,
-          sku: data.sku,
-          model: data.model,
-          stage: data.stage,
-          side: data.side,
-          min: data.min,
-          max: data.max,
-        });
+    const fetchSignals = async () => {
+      try {
+        const res = await fetch(`${MQTT_SIGNAL_API}/${stageNumber}`);
+        const json = await res.json();
+
+        if (json.success && json.signals) {
+          setMqttSignals(json.signals.filter((s) => s.active));
+        }
       } catch (err) {
-        console.error("API ERROR:", err);
+        console.error("Signal Load Error:", err);
       }
     };
 
-    fetchFromApi();
+    fetchSignals();
+  }, [stageNumber]);
+
+  /* ================= ANIMATION STYLES ================= */
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+      @keyframes fullScreenFlashRed {
+        0% { background-color: #000; }
+        50% { background-color: #330000; }
+        100% { background-color: #000; }
+      }
+
+      @keyframes fullScreenPulseGreen {
+        0% { background-color: #000; }
+        50% { background-color: #002200; }
+        100% { background-color: #000; }
+      }
+    `;
+    document.head.appendChild(style);
   }, []);
 
-  /* ================= MQTT CONNECT ================= */
+  const handleVinKeyDown = (e) => {
+    if (e.key === "Enter") {
+      const trimmed = vinInput.trim();
+      if (!trimmed) return;
+
+      lastVinRef.current = trimmed; // prevent duplicate MQTT call
+      fetchModelData(trimmed, stageNumber);
+    }
+  };
+
+  const getRootStyle = () => {
+    let baseStyle = { ...styles.root };
+
+    if (showResult) {
+      if (finalStatus === "PASS") {
+        baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+      } else {
+        baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+      }
+    }
+
+    return baseStyle;
+  };
+
+  /* ================= SIGNAL DETECTION ================= */
+
+  const insertProcessResult = async (oknokValue) => {
+  try {
+    await fetch(PROCESS_RESULT_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        unit_id: unitId,
+        route_step_id: routeStepId,
+        tool_id: toolId,
+        program_no: programNo,
+        result: oknokValue, // "OK" or "NOK"
+        value_payload: {
+          torque: liveTorque,
+          angle: liveAngle,
+          stage_no: stageNumber,
+        },
+        lsl: minTorque,
+        usl: maxTorque,
+      }),
+    });
+
+    console.log("Process result inserted in DB ✅");
+  } catch (err) {
+    console.error("Process Result Insert Failed ❌", err);
+  }
+};
+
+  const vinSignal = mqttSignals.find((s) =>
+    s.topic?.toLowerCase().includes("engineno"),
+  );
+
+  /* ================= GENERIC MQTT LISTENER ================= */
+
+  /* ================= VIN LISTENER ================= */
+
   useEffect(() => {
-    const client = mqtt.connect("ws://BROKER_IP:PORT");
-    mqttRef.current = client;
+    if (!stageNumber) return;
+
+    if (mqttClientRef.current) {
+      mqttClientRef.current.end(true);
+    }
+
+    const client = mqtt.connect("ws://192.168.1.15:9001", {
+      reconnectPeriod: 3000,
+      clean: true,
+    });
+
+    mqttClientRef.current = client;
 
     client.on("connect", () => {
-      client.subscribe("dc/torque/value");
-      client.subscribe("dc/angle/value");
+      console.log("MQTT Connected ✅");
+      setMqttConnected(true);
+
+      if (vinSignal?.topic) {
+        client.subscribe(vinSignal.topic);
+      }
+
+      client.subscribe(torqueTopic);
+      client.subscribe(angleTopic);
+      client.subscribe(prePitchTopic);
     });
 
-    client.on("message", (topic, msg) => {
-      const value = parseFloat(msg.toString());
-      if (isNaN(value)) return;
+    client.on("message", (topic, message) => {
+      const payload = message.toString();
 
-      if (topic === "dc/torque/value") setLiveTorque(value);
-      if (topic === "dc/angle/value") setLiveAngle(value);
+      /* ===== VIN ===== */
+      if (topic === vinTopicRef.current) {
+        const vin = payload.trim();
+
+        if (!vin) return;
+        if (lastVinRef.current === vin) return;
+
+        lastVinRef.current = vin;
+        setVinInput(vin);
+        fetchModelData(vin, stageNumber);
+      }
+
+      /* ===== Torque ===== */
+      if (topic === torqueTopic) {
+        const value = Number(payload);
+        if (!isNaN(value)) {
+          setLiveTorque(value);
+        }
+      }
+
+      /* ===== Angle ===== */
+      if (topic === angleTopic) {
+        const value = Number(payload);
+        if (!isNaN(value)) {
+          setLiveAngle(value);
+        }
+      }
+
+      if (topic === prePitchTopic) {
+        const value = Number(payload);
+
+        if (!isNaN(value)) {
+          setPrePitch(value);
+          console.log("PrePitch received from DataLogger:", value);
+        }
+      }
     });
 
-    return () => client.end();
-  }, []);
+    client.on("close", () => {
+      if (!client.connected) {
+        console.log("MQTT Disconnected ❌");
+        setMqttConnected(false);
+      }
+    });
 
-  /* ================= TORQUE VALIDATION ================= */
+    client.on("offline", () => {
+      console.log("MQTT Offline ❌");
+      setMqttConnected(false);
+    });
+
+    client.on("error", (err) => {
+      console.error("MQTT Error:", err);
+      setMqttConnected(false);
+    });
+
+    client.on("reconnect", () => {
+      console.log("MQTT Reconnecting...");
+    });
+
+    return () => {
+      client.end();
+    };
+  }, [stageNumber]);
+
+
   useEffect(() => {
-    if (liveTorque === null) return;
+  if (!vinSignal?.topic) return;
 
-    let currentResult = "NOT_OK";
-    if (liveTorque >= jobData.min && liveTorque <= jobData.max) {
-      currentResult = "OK";
+  vinTopicRef.current = vinSignal.topic;
+
+  if (mqttClientRef.current) {
+    mqttClientRef.current.subscribe(vinSignal.topic);
+    console.log("Subscribed to VIN topic:", vinSignal.topic);
+  }
+}, [vinSignal]);
+
+  /* ================= TIGHTENING LISTENER ================= */
+
+  /* ================= PASS / FAIL LOGIC ================= */
+
+  useEffect(() => {
+  if (
+    minTorque === "-" ||
+    maxTorque === "-" ||
+    liveTorque <= 0 ||
+    !mqttClientRef.current ||
+    !unitId ||
+    !routeStepId ||
+    !toolId ||
+    alreadyLogged
+  ) {
+    return;
+  }
+
+  const processResult = async () => {
+    const pass =
+      liveTorque >= Number(minTorque) &&
+      liveTorque <= Number(maxTorque);
+
+    const mqttResult = pass ? "1" : "0";
+    const oknokValue = pass ? "OK" : "NOK";
+
+    setFinalStatus(pass ? "PASS" : "FAIL");
+    setShowResult(true);
+    setShowTorqueValue(true);
+
+    if (prePitch === 0) {
+      if (pass) {
+        mqttClientRef.current.publish(resultTopic, "1");
+        await insertProcessResult("OK");
+        setAlreadyLogged(true);
+      }
+      return;
     }
 
-    setResult(currentResult);
-
-    // publish ONLY on change (industrial rule)
-    if (lastPublishedResult.current !== currentResult) {
-      mqttRef.current?.publish(
-        "dc/result",
-        currentResult === "OK" ? "1" : "0",
-      );
-      lastPublishedResult.current = currentResult;
+    if (prePitch === 1) {
+      mqttClientRef.current.publish(resultTopic, mqttResult);
+      await insertProcessResult(oknokValue);
+      setAlreadyLogged(true);
     }
-  }, [liveTorque, jobData]);
+  };
 
-  /* ================= DUMMY STATUS (REMOVE LATER) ================= */
-  useEffect(() => {
-    const m = setInterval(
-      () => setOperationMode(p => (p === "AUTO" ? "MANUAL" : "AUTO")),
-      5000,
-    );
-    return () => clearInterval(m);
-  }, []);
+  processResult();
+}, [liveTorque, prePitch, unitId, routeStepId, toolId, alreadyLogged]);
+  /* ================= FETCH MODEL DATA ================= */
 
-  useEffect(() => {
-    const s = setInterval(
-      () =>
-        setLineStatus(p =>
-          p === "INTERLOCKED" ? "BYPASSED" : "INTERLOCKED",
-        ),
-      6000,
+  const fetchModelData = async (vin_no, stage_no) => {
+  try {
+    setAlreadyLogged(false);
+    setFinalStatus(null);
+    setLiveTorque(0);
+    setLiveAngle(0);
+    setShowResult(false);
+    setShowTorqueValue(false);
+    setPrePitch(0);
+    setResultPublished(false);
+
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vin_no,
+        stage_no,
+      }),
+    });
+
+    const json = await res.json();
+    if (!json) return;
+
+    const recipeProcess = json.recipeProcess?.[0];
+
+    // 🔹 UI data
+    setModelName(json.model?.model_name ?? "-");
+    setModelSku(json.model?.model_code ?? "-");
+    setStageName(json.routeStep?.stage_name ?? "-");
+    setMinTorque(recipeProcess?.lsl ?? "-");
+    setMaxTorque(recipeProcess?.usl ?? "-");
+
+    // 🔹 IDs for DB insert
+    setUnitId(json.unit?.unit_id); // assumed
+    setRouteStepId(json.routeStep?.route_step_id);
+    setToolId(recipeProcess?.tool_id);
+    setProgramNo(recipeProcess?.program_no);
+
+  } catch (err) {
+    console.error("Model fetch failed", err);
+  }
+};
+
+
+    /* ================= PASS / FAIL + TORQUE SECTION COMPONENT ================= */
+
+  const TorqueResultSection = () => {
+    return (
+      <>
+        {/* ===== PASS / FAIL DISPLAY ===== */}
+        <div style={styles.torqueDisplay}>
+          <div
+            style={{
+              fontSize: 80,
+              fontWeight: "bold",
+              color: isTorqueOk ? "#00ff00" : "#ff0033",
+              textAlign: "center",
+              width: "100%",
+              textShadow: isTorqueOk
+                ? "0 0 15px #00ff00"
+                : "0 0 15px #ff0033",
+              ...(showResult ? styles.blinkText : {}),
+            }}
+          >
+            {showResult && finalStatus}
+          </div>
+        </div>
+
+        {/* ===== TORQUE VALUE DISPLAY ===== */}
+        <div style={styles.torqueText}>
+          {showTorqueValue && (
+            <div style={{ fontSize: 60, fontWeight: "bold", marginTop: "10" }}>
+              {liveTorque} Nm
+            </div>
+          )}
+          TORQUE
+          <br />
+          VALUE
+        </div>
+      </>
     );
-    return () => clearInterval(s);
-  }, []);
+  };
 
   const formatDate = now.toLocaleDateString("en-GB");
   const formatTime = now.toLocaleTimeString("en-US", {
@@ -1103,36 +2891,48 @@ const DCToolHMI = () => {
     hour12: true,
   });
 
+  if (isInvalidStage) {
+    return <div>Invalid Stage Number</div>;
+  }
+
   return (
-    <div style={styles.root}>
+    <div style={getRootStyle()}>
       {/* ================= HEADER ================= */}
       <div style={styles.header}>
-        <img src="/hero-logo.png" alt="Hero Logo" style={styles.heroLogo} />
+        <img src="/Hero.svg" alt="Hero Logo" style={styles.heroLogo} />
         <div style={styles.headerPill}>
-          <div style={styles.headerTitle}>
-            FRONT WHEEL AXLE TIGHTENING
-          </div>
+          <div style={styles.headerTitle}>DC TOOL TIGHTENING</div>
         </div>
-        <img src="/operatex-logo.jpg" alt="OperateX" style={styles.operatexLogo} />
+        <img
+          src="/operatex.png"
+          alt="OperateX Logo"
+          style={styles.operatexLogo}
+        />
       </div>
 
-      {/* ================= MODEL ================= */}
+      {/* ================= MODEL ROW ================= */}
       <div style={styles.modelRow}>
         <div style={styles.modelText}>
-          Model: <span style={styles.modelValue}>{jobData.model}</span>
+          Model: <span style={styles.modelValue}>{modelName}</span>
         </div>
-        <div style={styles.mqtt}>MQTT Connected</div>
+        <div
+          style={{
+            ...styles.mqtt,
+            color: mqttConnected ? "#00ff00" : "#ff0033",
+          }}
+        >
+          {mqttConnected ? "MQTT Connected" : "MQTT Disconnected"}
+        </div>
       </div>
 
-      {/* ================= STATUS ================= */}
+      {/* ================= LINE STATUS ================= */}
       <div style={styles.lineStatusRow}>
         <div style={styles.lineStatusLeft}>
           <span style={styles.lineStatusTitle}>LINE STATUS :</span>
           <span
             style={{
               ...styles.lineStatusValue,
-              color:
-                lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000",
+              color: lineStatus === "INTERLOCKED" ? "#00ff00" : "#ff8000df",
             }}
           >
             {lineStatus}
@@ -1140,11 +2940,21 @@ const DCToolHMI = () => {
         </div>
 
         <div style={styles.lineStatusRight}>
-          <span style={{ ...styles.lineActive, opacity: operationMode === "AUTO" ? 1 : 0.3 }}>
+          <span
+            style={{
+              ...styles.lineActive,
+              opacity: operationMode === "AUTO" ? 1 : 0.3,
+            }}
+          >
             AUTO
           </span>
           <span style={styles.lineSeparator}>|</span>
-          <span style={{ ...styles.lineManual, opacity: operationMode === "MANUAL" ? 1 : 0.3 }}>
+          <span
+            style={{
+              ...styles.lineManual,
+              opacity: operationMode === "MANUAL" ? 1 : 0.3,
+            }}
+          >
             MANUAL
           </span>
         </div>
@@ -1152,21 +2962,26 @@ const DCToolHMI = () => {
 
       {/* ================= BODY ================= */}
       <div style={styles.body}>
-        {/* LEFT */}
+        {/* LEFT PANEL */}
         <div style={styles.leftPanel}>
           <div style={styles.circleRow}>
             <div style={styles.circleOuter}>
               <div style={styles.circleInner}>
-                <div style={styles.circleValue}>{jobData.stage}</div>
+                <div style={styles.circleValue}>{stageNo}</div>
               </div>
-              <div style={styles.circleLabel}>Stage<br />Number</div>
+              <div style={styles.circleLabel}>
+                Stage
+                <br />
+                Number
+              </div>
             </div>
 
-            <div style={styles.circleOuter}>
-              <div style={styles.circleInner}>
-                <div style={styles.circleValue}>{jobData.side}</div>
+            <div style={styles.stageNameBox}>
+              <div style={styles.stageNameText}>{stageName}</div>
+              <div style={styles.stageNameLabel}>
+                Stage
+                <br /> Name
               </div>
-              <div style={styles.circleLabel}>Side</div>
             </div>
           </div>
 
@@ -1182,89 +2997,79 @@ const DCToolHMI = () => {
           </div>
         </div>
 
-        {/* LIMITS */}
+        {/* TORQUE LIMIT */}
         <div style={styles.torqueLimits}>
           <div style={styles.torqueBox}>
-            <div style={styles.torqueValue}>{jobData.min}</div>
-            <div style={styles.torqueLabel}>MINIMUM<br />TORQUE</div>
+            <div style={styles.torqueValue}>{minTorque}</div>
+            <div style={styles.torqueLabel}>
+              MINIMUM
+              <br />
+              TORQUE
+            </div>
           </div>
-
           <div style={styles.torqueDivider} />
-
           <div style={styles.torqueBox}>
-            <div style={styles.torqueValue}>{jobData.max}</div>
-            <div style={styles.torqueLabel}>MAXIMUM<br />TORQUE</div>
+            <div style={styles.torqueValue}>{maxTorque}</div>
+            <div style={styles.torqueLabel}>
+              MAXIMUM
+              <br />
+              TORQUE
+            </div>
           </div>
         </div>
 
-        {/* RIGHT */}
+        {/* RIGHT PANEL */}
         <div style={styles.rightPanel}>
-          <div style={styles.vinBox}>VIN: {jobData.vin}</div>
+          <input
+            style={styles.vinBox}
+            placeholder="ENTER VIN"
+            value={vinInput}
+            onChange={(e) => {
+              setVinInput(e.target.value);
+              setShowResult(false);
+              setShowTorqueValue(false);
+            }}
+            onKeyDown={handleVinKeyDown}
+          />
 
           <div style={styles.skuBlock}>
             <div style={styles.skuRow}>
               <div style={styles.skuText}>
-                SKU: <span style={styles.yellow}>{jobData.sku}</span>
-              </div>
-
-              <div
-                style={{
-                  ...styles.resultBtn,
-                  background:
-                    result === "OK"
-                      ? "#00ff00"
-                      : result === "NOT_OK"
-                      ? "#ff0000"
-                      : "#777",
-                }}
-              >
-                {result ?? "WAIT"}
+                SKU - <span style={styles.yellow}>{modelSku}</span>
               </div>
             </div>
 
             <div style={styles.angleRow}>
-              ANGLE <span style={styles.yellow}>{liveAngle ?? "--"}</span>
+              ANGLE -{" "}
+              {showTorqueValue && (
+                <span style={styles.yellow}>{liveAngle}°</span>
+              )}
             </div>
           </div>
 
-          <div style={styles.torqueDisplay}>
-            <div style={styles.torqueIndicator}>
-              <span style={{ fontSize: 40, fontWeight: "bold" }}>
-                {liveTorque ?? "--"}
-              </span>
-            </div>
-          </div>
-
-          <div style={styles.torqueText}>
-            TORQUE<br />VALUE
-          </div>
+          <TorqueResultSection />
         </div>
+      </div>
+      {/* FOOTER */}
+      <div style={styles.footer}>
+        Powered by{" "}
+        <span style={styles.footerHighlight}>OperateX Thetavega</span>
       </div>
     </div>
   );
 };
 
-
-/* ================= STYLES ================= */
 const styles = {
   root: {
-    width: "100%",
+    width: "100vw",
     height: "100vh",
     background: "#000",
     color: "#fff",
     fontFamily: "Segoe UI, Arial, sans-serif",
-
-    /* FULL BLUE BORDER – ALL 4 SIDES */
-    border: "6px solid #00c3ff",
-    boxSizing: "border-box",
-
-    /* REMOVE GAP */
-   
-   
-
-    /* OPTIONAL: industrial double-line look */
+    border: "8px solid #00c3ff",
     outline: "2px solid #0099cc",
     outlineOffset: -8,
+    boxSizing: "border-box",
   },
 
   header: {
@@ -1272,7 +3077,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    position: "relative", // ⬅️ IMPORTANT
+    position: "relative",
   },
 
   heroLogo: {
@@ -1285,14 +3090,19 @@ const styles = {
   operatexLogo: {
     position: "absolute",
     right: 23,
-    height: 55,
-  
+    top: "60%",
+    transform: "translateY(-50%)",
+    height: 155,
     objectFit: "contain",
   },
 
+  blinkText: {
+    animation: "blink 3s infinite",
+  },
+
   headerPill: {
-    width: "50%",
-    background: "#12bdf2",
+    width: "100%",
+    background: "#fff",
     borderRadius: "0 0 22px 22px",
     padding: "12px 0",
     textAlign: "center",
@@ -1314,7 +3124,8 @@ const styles = {
   modelText: {
     flex: 1,
     color: "#ffd000",
-    fontSize: 35,
+    fontSize: 38,
+    fontWeight: "bold",
   },
 
   modelValue: { fontWeight: "bold" },
@@ -1370,7 +3181,7 @@ const styles = {
 
   leftPanel: {
     width: 500,
-    border: "4px solid #b400ff",
+    border: "10px solid #b400ff",
     borderRadius: 16,
     padding: 16,
     height: 500,
@@ -1378,10 +3189,10 @@ const styles = {
 
   circleRow: {
     display: "flex",
-    justifyContent: "center", // ⬅️ centers both circles together
-    alignItems: "flex-start",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 80,
-    marginTop: 20, // ⬅️ space between the two circles
+    marginTop: 20,
   },
 
   circleOuter: { textAlign: "center" },
@@ -1390,8 +3201,8 @@ const styles = {
     width: 130,
     height: 130,
     borderRadius: "60%",
-    border: "4px solid #00ff00",
-    outline: "4px solid #b400ff",
+    border: "8px solid #00ff00",
+    outline: "8px solid #b400ff",
     outlineOffset: 5,
     display: "flex",
     justifyContent: "center",
@@ -1408,6 +3219,27 @@ const styles = {
     marginTop: 12,
     fontSize: 23,
     fontWeight: "bold",
+  },
+
+  stageNameBox: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center", // 🔥 center align like circle
+    justifyContent: "center",
+    textAlign: "center",
+  },
+
+  stageNameText: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#00d4ff",
+    letterSpacing: 1,
+  },
+
+  stageNameLabel: {
+    fontSize: 23,
+    fontWeight: "bold",
+    marginTop: 23,
   },
 
   dateTimeBlock: {
@@ -1458,13 +3290,14 @@ const styles = {
   torqueDivider: {
     height: 2,
     width: "80%",
-    background: "#b400ff",
+    background: "#ff8000df",
     margin: "20px 0",
+    border: "5px solid #ff8000df",
   },
 
   rightPanel: {
     flex: 1,
-    border: "4px solid #00c3ff",
+    border: "10px solid #00c3ff",
     padding: 10,
     borderRadius: 16,
   },
@@ -1477,6 +3310,7 @@ const styles = {
     padding: 10,
     borderRadius: 20,
     marginBottom: 15,
+    width: "100%",
   },
 
   skuBlock: {
@@ -1494,16 +3328,6 @@ const styles = {
   skuText: { color: "#fff" },
   yellow: { color: "#ffd000", fontWeight: "bold" },
 
-  resultBtn: {
-    background: "#fff",
-    color: "#000",
-    padding: "6px 18px",
-    borderRadius: 20,
-
-    marginTop: 10,
-    marginLeft: 250,
-  },
-
   angleRow: {
     fontSize: 40,
   },
@@ -1511,7 +3335,7 @@ const styles = {
   torqueDisplay: {
     height: 150,
     width: 420,
-    border: "4px solid #00ff00",
+    border: "10px solid #00ff00",
     borderRadius: 20,
     marginTop: 14,
     display: "flex",
@@ -1519,21 +3343,34 @@ const styles = {
     padding: 10,
   },
 
-  torqueIndicator: {
-    width: 20,
-    height: 12,
-    background: "#00ff00",
-  },
-
   torqueText: {
     color: "#ffd000",
     fontSize: 20,
     textAlign: "right",
     width: "100%",
-    paddingRight: 230,
-    marginTop: -70,
+    paddingRight: 180,
+    marginTop: -150,
+  },
+
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    width: "100%",
+    background: "#ff8000",
+    color: "#000",
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "bold",
+    padding: "8px 0",
+    letterSpacing: 1,
+    boxShadow: "0 -2px 10px rgba(0,0,0,0.6)",
+    zIndex: 1000,
+  },
+
+  footerHighlight: {
+    fontWeight: "bold",
   },
 };
-
 
 export default DCToolHMI;
