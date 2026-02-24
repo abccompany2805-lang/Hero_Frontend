@@ -241,137 +241,157 @@ const RoutePartRequirementMaster = () => {
       </div>
 
       {/* MODAL */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1050,
-          }}
+{showModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1050,
+    }}
+  >
+    <div
+      className="bg-white rounded-4 shadow p-4"
+      style={{ width: 520 }}
+    >
+      <h5 className="mb-4">
+        {isEditing ? "Edit Requirement" : "Add Requirement"}
+      </h5>
+
+      {/* Route Step */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Route Step <span className="text-danger">*</span>
+        </label>
+        <select
+          className="form-select"
+          value={formData.route_step_id}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              route_step_id: e.target.value,
+            })
+          }
+          disabled={isEditing}
         >
-          <div
-            className="bg-white rounded-4 shadow p-4"
-            style={{ width: 500 }}
-          >
-            <h5 className="mb-3">
-              {isEditing
-                ? "Edit Requirement"
-                : "Add Requirement"}
-            </h5>
-
-            <select
-              className="form-control mb-2"
-              value={formData.route_step_id}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  route_step_id: e.target.value,
-                })
-              }
-              disabled={isEditing}
+          <option value="">Select Route Step</option>
+          {routeSteps.map((r) => (
+            <option
+              key={r.route_step_id}
+              value={r.route_step_id}
             >
-              <option value="">Select Route Step</option>
-              {routeSteps.map((r) => (
-                <option
-                  key={r.route_step_id}
-                  value={r.route_step_id}
-                >
-                  SEQ {r.seq_no} - Stage {r.stage_id}
-                </option>
-              ))}
-            </select>
+              SEQ {r.seq_no} - Stage {r.stage_id}
+            </option>
+          ))}
+        </select>
+      </div>
 
-            <select
-              className="form-control mb-2"
-              value={formData.part_id}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  part_id: e.target.value,
-                })
-              }
-              disabled={isEditing}
+      {/* Part */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Part <span className="text-danger">*</span>
+        </label>
+        <select
+          className="form-select"
+          value={formData.part_id}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              part_id: e.target.value,
+            })
+          }
+          disabled={isEditing}
+        >
+          <option value="">Select Part</option>
+          {parts.map((p) => (
+            <option
+              key={p.part_id}
+              value={p.part_id}
             >
-              <option value="">Select Part</option>
-              {parts.map((p) => (
-                <option
-                  key={p.part_id}
-                  value={p.part_id}
-                >
-                  {p.part_no} - {p.part_name}
-                </option>
-              ))}
-            </select>
+              {p.part_no} - {p.part_name}
+            </option>
+          ))}
+        </select>
+      </div>
 
-            <input
-              type="number"
-              className="form-control mb-2"
-              placeholder="Quantity Required"
-              value={formData.qty_required}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  qty_required: e.target.value,
-                })
-              }
-            />
+      {/* Quantity */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Quantity Required <span className="text-danger">*</span>
+        </label>
+        <input
+          type="number"
+          className="form-control"
+          placeholder="Enter Quantity"
+          value={formData.qty_required}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              qty_required: e.target.value,
+            })
+          }
+        />
+      </div>
 
-            <select
-              className="form-control mb-2"
-              value={formData.scan_policy}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  scan_policy: e.target.value,
-                })
-              }
-            >
-              <option value="EACH_PART">
-                EACH_PART
-              </option>
-              <option value="BATCH_ONCE">
-                BATCH_ONCE
-              </option>
-            </select>
+      {/* Scan Policy */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Scan Policy
+        </label>
+        <select
+          className="form-select"
+          value={formData.scan_policy}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              scan_policy: e.target.value,
+            })
+          }
+        >
+          <option value="EACH_PART">EACH_PART</option>
+          <option value="BATCH_ONCE">BATCH_ONCE</option>
+        </select>
+      </div>
 
-            <div className="form-check">
-              <input
-                type="checkbox"
-                className="form-check-input"
-                checked={formData.mandatory}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    mandatory: e.target.checked,
-                  })
-                }
-              />
-              <label className="form-check-label">
-                Mandatory
-              </label>
-            </div>
+      {/* Mandatory */}
+      <div className="form-check mb-4">
+        <input
+          type="checkbox"
+          className="form-check-input"
+          checked={formData.mandatory}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              mandatory: e.target.checked,
+            })
+          }
+        />
+        <label className="form-check-label fw-semibold">
+          Mandatory
+        </label>
+      </div>
 
-            <div className="d-flex justify-content-end gap-2 mt-3">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={handleSave}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Buttons */}
+      <div className="d-flex justify-content-end gap-2">
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowModal(false)}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={handleSave}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

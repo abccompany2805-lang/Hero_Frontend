@@ -26,36 +26,71 @@ const [isInterlocked, setIsInterlocked] = useState(false);
 const [prePitchValue, setPrePitchValue] = useState(null); // 0 or 1
 /* ================= RESULT STATE ================= */
 const [finalResult, setFinalResult] = useState(null); // null | PASS | FAIL
-const STATIC_PREPITCH_TOPIC = "PREPITCH";
 
+const isPass = finalResult === "PASS";
+const isFail = finalResult === "FAIL";
+const [mqttConnected, setMqttConnected] = useState(false);
 
 
 const isInvalidStage = !stageNumber || isNaN(stageNumber);
 const [mqttSignals, setMqttSignals] = useState([]);
 
+const VIN_TOPIC = `ST${stageNumber}_EngineNumber`;
+const RESULT_TOPIC = `ST${stageNumber}_Result`;
+const STATIC_PREPITCH_TOPIC = "PrePitch";
+
 
 const mqttClientRef = useRef(null);
 
 
+const [alert, setAlert] = useState({
+  type: null, // "error" | "warning" | "success"
+  message: ""
+});
+
+
+const showAlert = (type, message, autoClear = true) => {
+  setAlert({ type, message });
+
+  if (autoClear) {
+    setTimeout(() => {
+      setAlert({ type: null, message: "" });
+    }, 3000);
+  }
+};
+
 
   // SKU → scanned count
-  const [scanQtyMap, setScanQtyMap] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : {};
-  });
-
+  // const [scanQtyMap, setScanQtyMap] = useState(() => {
+  //   const saved = localStorage.getItem(STORAGE_KEY);
+  //   return saved ? JSON.parse(saved) : {};
+  // });
+const [scanQtyMap, setScanQtyMap] = useState({});
   /* ================= FOCUS ================= */
   useEffect(() => {
     scanInputRef.current?.focus();
   }, [scannedValue, wrongSku]);
 
   /* ================= SAVE TO LOCAL ================= */
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(scanQtyMap));
-  }, [scanQtyMap]);
+  // useEffect(() => {
+  //   localStorage.setItem(STORAGE_KEY, JSON.stringify(scanQtyMap));
+  // }, [scanQtyMap]);
 
 
 /* ================= MQTT VIN VIA API (POLLING) -DONE ================= */
+
+
+useEffect(() => {
+  if (
+    mqttConnected &&
+    vin &&
+    routeData &&
+    finalResult !== "PASS"
+  ) {
+    scanInputRef.current?.focus();
+  }
+}, [mqttConnected, vin, routeData, finalResult]);
+
 
 useEffect(() => {
   if (!stageNumber) return;
@@ -90,136 +125,10 @@ const partScanSignal = mqttSignals.find(
 
 
 
-
-//   if (!vinSignal?.topic && !prepitchSignal?.topic) return;
-
-//   const client = mqtt.connect("ws://localhost:9001");
-
-//   mqttClientRef.current = client;
-
-//   client.on("connect", () => {
-//     console.log("MQTT Connected");
-
-//     if (vinSignal?.topic) {
-//       client.subscribe(vinSignal.topic);
-//       console.log("Subscribed VIN:", vinSignal.topic);
-//     }
-
-//     if (prepitchSignal?.topic) {
-//       client.subscribe(prepitchSignal.topic);
-//       console.log("Subscribed PrePitch:", prepitchSignal.topic);
-//     }
-//   });
-
-//   client.on("message", (topic, message) => {
-//     const value = message.toString().trim();
-
-//     if (topic === vinSignal?.topic && value) {
-//       handleNewVin(value);
-//     }
-
-//     if (topic === prepitchSignal?.topic) {
-//       const prepitchVal = Number(value || 0);
-//       setPrePitchValue(prepitchVal);
-//     }
-//   });
-
-//   client.on("error", (err) => {
-//     console.error("MQTT Error:", err);
-//   });
-
-//   return () => {
-//     client.end();
-//   };
-
-// }, [vinSignal?.topic, prepitchSignal?.topic]);
-
-
-// useEffect(() => {
-//   if (!vinSignal?.topic && !prepitchSignal?.topic) return;
-
-//   let reconnectTimeout = null;
-
-//   const connectMqtt = () => {
-//     console.log("Connecting MQTT...");
-
-//     const client = mqtt.connect("ws://192.168.1.15:9001", {
-//       reconnectPeriod: 3000,   // 🔥 auto reconnect every 3 sec
-//       connectTimeout: 4000,
-//       clean: true,
-//       keepalive: 60,
-//     });
-
-//     mqttClientRef.current = client;
-
-//     client.on("connect", () => {
-//       console.log("✅ MQTT Connected");
-
-//       if (vinSignal?.topic) {
-//         client.subscribe(vinSignal.topic, { qos: 0 });
-//         console.log("Subscribed VIN:", vinSignal.topic);
-//       }
-
-//       if (prepitchSignal?.topic) {
-//         client.subscribe(prepitchSignal.topic, { qos: 0 });
-//         console.log("Subscribed PrePitch:", prepitchSignal.topic);
-//       }
-//     });
-
-//     client.on("message", (topic, message) => {
-//       const value = message.toString().trim();
-
-//       if (topic === vinSignal?.topic && value) {
-//         handleNewVin(value);
-//       }
-
-//       if (topic === prepitchSignal?.topic) {
-//         setPrePitchValue(Number(value || 0));
-//       }
-//     });
-
-//     client.on("reconnect", () => {
-//       console.log("🔄 MQTT Reconnecting...");
-//     });
-
-//     client.on("close", () => {
-//       console.log("⚠️ MQTT Connection Closed");
-//     });
-
-//     client.on("offline", () => {
-//       console.log("📴 MQTT Offline");
-//     });
-
-//     client.on("error", (err) => {
-//       console.error("❌ MQTT Error:", err.message);
-//       client.end();
-//     });
-
-//     return client;
-//   };
-
-//   const client = connectMqtt();
-
-//   return () => {
-//     console.log("Cleaning MQTT...");
-//     if (client) {
-//       client.end(true);
-//     }
-//     if (reconnectTimeout) {
-//       clearTimeout(reconnectTimeout);
-//     }
-//   };
-
-// }, [vinSignal?.topic, prepitchSignal?.topic]);
-
-
 useEffect(() => {
-  if (!vinSignal?.topic) return;
+  if (!stageNumber) return;
 
-  console.log("🚀 useEffect triggered");
-  console.log("VIN Topic:", vinSignal?.topic);
-
-  const client = mqtt.connect("ws://localhost:9001", {
+  const client = mqtt.connect("ws://192.168.1.12:9001", {
     reconnectPeriod: 3000,
     connectTimeout: 4000,
     clean: true,
@@ -230,34 +139,31 @@ useEffect(() => {
 
   client.on("connect", () => {
     console.log("✅ MQTT Connected");
+    setMqttConnected(true);
 
-    // VIN topic from API
-    client.subscribe(vinSignal.topic, { qos: 0 });
-    console.log("📡 Subscribed VIN:", vinSignal.topic);
-
-    // Static PrePitch
+    client.subscribe(VIN_TOPIC, { qos: 0 });
     client.subscribe(STATIC_PREPITCH_TOPIC, { qos: 0 });
-    console.log("📡 Subscribed Static PrePitch:", STATIC_PREPITCH_TOPIC);
+
+    showAlert("success", "MQTT CONNECTED ✅", true);
   });
 
   client.on("message", (topic, message) => {
     const value = message.toString().trim();
 
-    if (topic === vinSignal.topic && value) {
+    // VIN
+    if (topic === VIN_TOPIC && value) {
       handleNewVin(value);
     }
 
+    // PREPITCH
     if (topic === STATIC_PREPITCH_TOPIC) {
       setPrePitchValue(Number(value || 0));
     }
   });
 
-  client.on("reconnect", () => {
-    console.log("🔄 MQTT Reconnecting...");
-  });
-
   client.on("offline", () => {
-    console.log("📴 MQTT Offline");
+    setMqttConnected(false);
+    showAlert("error", "MQTT CONNECTION LOST 🔌", false);
   });
 
   client.on("error", (err) => {
@@ -265,11 +171,10 @@ useEffect(() => {
   });
 
   return () => {
-    console.log("🧹 Cleaning MQTT Connection...");
     client.end(true);
   };
 
-}, [vinSignal?.topic]);
+}, [stageNumber]);
 
 
 
@@ -292,19 +197,25 @@ useEffect(() => {
       setFinalResult("PASS");
       setIsInterlocked(false);
       publishPartScanStatus("PASS"); // 🔥 send immediately
+
+      showAlert("success", "WAIT FOR THE NEXT CYCLE 🔄", false);
     }
     return;
   }
 
   // ================= FAIL LOGIC =================
-  if (!allScanned && prepitch === 1) {
-    if (finalResult !== "FAIL") {
-      setFinalResult("FAIL");
-      setIsInterlocked(true);
-      publishPartScanStatus("FAIL"); // 🔥 send only when prepitch = 1
-    }
-    return;
+ // ================= FAIL LOGIC =================
+if (!allScanned && prepitch === 1) {
+  if (finalResult !== "FAIL") {
+    setFinalResult("FAIL");
+
+    // 🚫 DO NOT INTERLOCK
+    // setIsInterlocked(true);
+
+    publishPartScanStatus("FAIL");
   }
+  return;
+}
 
   // ================= DEFAULT =================
   setFinalResult(null);
@@ -349,17 +260,18 @@ if (vin === trimmedVin) return;
 
 
 const publishPartScanStatus = (status) => {
-  if (!partScanSignal?.topic) return;
   if (!mqttClientRef.current) return;
+
+  const payload = status === "PASS" ? "1" : "0";
 
   try {
     mqttClientRef.current.publish(
-      partScanSignal.topic,
-      status,
+      RESULT_TOPIC,
+      payload,
       { qos: 0, retain: false }
     );
 
-    console.log("MQTT Published:", status);
+    console.log(`MQTT Published to ${RESULT_TOPIC}:`, payload);
   } catch (err) {
     console.error("MQTT Publish Error:", err);
   }
@@ -386,14 +298,15 @@ const fetchVinDataFromApi = async (incomingVin) => {
     const json = await res.json();
     console.log("VIN API RESPONSE:", json);
 
-    if (json?.model) {
-      setRouteData(json);
-    } else {
-      console.error("Invalid VIN response structure");
-      setRouteData(null);
-    }
+ if (json?.model) {
+  setRouteData(json);
+} else {
+  setRouteData(null);
+  showAlert("warning", "VIN NOT FOUND ⚠", true);
+}
   } catch (err) {
-    console.error("VIN API error", err);
+   console.error("VIN API error", err);
+showAlert("error", "SERVER CONNECTION FAILED 🌐", false);
   } finally {
     setLoading(false);
   }
@@ -425,23 +338,158 @@ const parts =
   };
 
   /* ================= SCAN LOGIC ================= */
-const handleScan = () => {
-  if (!scannedValue || isInterlocked) return;
-  if (!routeData?.partRequirements) return;
+// const handleScan = () => {
 
-  const scannedSku = scannedValue.replace(/[\r\n]/g, "").trim();
+//   // 🚫 HARD LOCK IF PASS
+//   if (finalResult === "PASS") {
+//     showAlert("warning", "SCAN NOT ALLOWED - STATUS PASS ✅", true);
+//     return;
+//   }
 
-  if (!scannedSku) {
-    setScannedValue("");
+//   if (!scannedValue) return;
+//   if (!routeData?.partRequirements) return;
+
+
+  
+
+//   const scannedSku = scannedValue.replace(/[\r\n]/g, "").trim();
+//   setLastScanText(scannedSku);   // ✅ ADD THIS
+
+//   if (!scannedSku) {
+   
+//     return;
+//   }
+
+//   let matchedPart = null;
+
+//   for (const part of routeData.partRequirements) {
+//     if (!part.regex_pattern) continue;
+
+//     // 🔥 Replace (PART_CODE) with actual part_no
+//     const finalPattern = part.regex_pattern.replace(
+//       "PART_CODE",
+//       part.part_no
+//     );
+
+//     const regex = new RegExp(finalPattern);
+
+//     // 1️⃣ Regex match
+//     if (!regex.test(scannedSku)) continue;
+
+//     // 2️⃣ Length validation
+//     if (
+//       (part.min_len && scannedSku.length < part.min_len) ||
+//       (part.max_len && scannedSku.length > part.max_len)
+//     ) {
+//       continue;
+//     }
+
+//     matchedPart = part;
+//     break;
+//   }
+
+//  if (!matchedPart) {
+//   setWrongSku(true);
+//   showAlert("error", "WRONG PART SCANNED ❌", true);
+ 
+//   return;
+// }
+
+//   setWrongSku(false);
+//   setLastScannedSku(matchedPart.part_no);
+
+// setScanQtyMap((prev) => {
+//   const current = prev[matchedPart.part_no] || 0;
+
+//   // ❌ Duplicate not allowed
+//   if (!matchedPart.allow_duplicate && current >= 1) {
+//     showAlert("error", "DUPLICATE SCAN NOT ALLOWED ❌", true);
+//     return prev;
+//   }
+
+//   // ❌ Exceeds required qty
+//   if (current >= matchedPart.qty_required) {
+//     showAlert("warning", "REQUIRED QTY ALREADY COMPLETED ⚠", true);
+//     return prev;
+//   }
+
+//   return {
+//     ...prev,
+//     [matchedPart.part_no]: current + 1,
+//   };
+// });
+
+//   setScannedValue("");
+// };
+
+const savePartScanToDb = async ({
+  matchedPart,
+  barcode,
+  status,
+  reason = null
+}) => {
+  try {
+    if (!routeData?.unitData?.unit_id) {
+      console.error("Unit ID missing");
+      return;
+    }
+
+    if (!routeData?.routeStep?.route_step_id) {
+      console.error("Route Step ID missing");
+      return;
+    }
+
+    const payload = {
+      unit_id: routeData.unitData.unit_id,
+      event_ts: new Date().toISOString(),
+      route_step_id: routeData.routeStep.route_step_id,
+      part_id: matchedPart?.part_id || null,
+      barcode_value: barcode,
+      result: status, // 'OK' only now
+      reason: reason
+    };
+
+    const res = await fetch(`${API_BASE_URL}/api/part-scan-results`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const json = await res.json();
+
+    if (!json.success) {
+      console.error("DB Insert Failed:", json.message);
+    } else {
+      console.log("Scan saved:", json.data);
+    }
+
+  } catch (err) {
+    console.error("Part Scan Save Error:", err);
+  }
+};
+
+
+const handleScan = async () => {
+  // 1) Block if final result already PASS
+  if (finalResult === "PASS") {
+    showAlert("warning", "SCAN NOT ALLOWED - STATUS PASS ✅", true);
     return;
   }
 
+  if (!scannedValue) return;
+  if (!routeData?.partRequirements) return;
+
+  const scannedSku = scannedValue.replace(/[\r\n]/g, "").trim();
+  setLastScanText(scannedSku);
+
+  if (!scannedSku) return;
+
   let matchedPart = null;
 
+  // ================= FIND MATCH =================
   for (const part of routeData.partRequirements) {
     if (!part.regex_pattern) continue;
 
-    // 🔥 Replace (PART_CODE) with actual part_no
     const finalPattern = part.regex_pattern.replace(
       "PART_CODE",
       part.part_no
@@ -449,10 +497,8 @@ const handleScan = () => {
 
     const regex = new RegExp(finalPattern);
 
-    // 1️⃣ Regex match
     if (!regex.test(scannedSku)) continue;
 
-    // 2️⃣ Length validation
     if (
       (part.min_len && scannedSku.length < part.min_len) ||
       (part.max_len && scannedSku.length > part.max_len)
@@ -464,54 +510,89 @@ const handleScan = () => {
     break;
   }
 
+  // ================= WRONG PART =================
   if (!matchedPart) {
     setWrongSku(true);
+    showAlert("error", "WRONG PART SCANNED ❌", true);
+
+    // ❌ DO NOT SAVE WRONG PART TO DB
     setScannedValue("");
     return;
   }
 
   setWrongSku(false);
+
+  const currentCount = scanQtyMap[matchedPart.part_no] || 0;
+
+  // ================= BLOCK IF QTY COMPLETED =================
+  if (currentCount >= matchedPart.qty_required) {
+    showAlert("warning", "PART ALREADY COMPLETED ✅", true);
+    setScannedValue("");
+    return; // 🚫 DO NOT SAVE
+  }
+
+  // ================= BLOCK DUPLICATE (WHEN NOT ALLOWED) =================
+  if (!matchedPart.allow_duplicate && currentCount > 0) {
+    showAlert("error", "DUPLICATE SCAN NOT ALLOWED ❌", true);
+    setScannedValue("");
+    return; // 🚫 DO NOT SAVE
+  }
+
+  // ================= VALID SCAN =================
+  setScanQtyMap((prev) => ({
+    ...prev,
+    [matchedPart.part_no]: currentCount + 1,
+  }));
+
   setLastScannedSku(matchedPart.part_no);
 
-  setScanQtyMap((prev) => {
-    const current = prev[matchedPart.part_no] || 0;
-
-    if (current >= matchedPart.qty_required) return prev;
-
-    return {
-      ...prev,
-      [matchedPart.part_no]: current + 1,
-    };
+  // ✅ ONLY HERE WE SAVE TO DB (OK)
+  await savePartScanToDb({
+    matchedPart,
+    barcode: scannedSku,
+    status: "OK",
+    reason: null
   });
 
   setScannedValue("");
 };
-
-
   /* ================= ROW STYLE ================= */
-  const getRowStyle = (row) => {
-    const scanned = scanQtyMap[row.sku] || 0;
+const getRowStyle = (row) => {
+  const scanned = scanQtyMap[row.sku] || 0;
 
-    if (scanned === 0) {
-      return {
-        backgroundColor: "#ffffff",
-        color: "#000",
-        border: "2px solid #000",
-      };
-    }
+  if (scanned === 0) {
+    return {
+      backgroundColor: "#ffffff",
+      color: "#000"
+    };
+  }
 
-    if (scanned < row.qty) {
-      return {
-        backgroundColor: "#ffa500",
-        color: "#000",
-      };
-    }
+  // 🟠 Scanned but not complete
+  if (scanned > 0 && scanned < row.qty) {
+    return {
+      backgroundColor: "#ffa500",
+      color: "#000",
+      fontWeight: "bold"
+    };
+  }
 
+  // 🟢 Fully completed
+  if (scanned >= row.qty) {
     return {
       backgroundColor: "#00ff00",
       color: "#000",
+      fontWeight: "bold"
     };
-  };
+  }
+
+  return {};
+};
+
+const dynamicBorderColor = isPass
+  ? "#00ff00"
+  : isFail
+  ? "#ff0033"
+  : null;
 
 return (
   <>
@@ -520,7 +601,16 @@ return (
         Invalid Stage Number
       </div>
     ) : (
-<div style={ui.root}>
+<div
+  style={{
+    ...ui.root,
+    borderLeft: `6px solid ${mqttConnected ? "#00ff00" : "#ff0033"}`,
+    borderTop: `6px solid ${mqttConnected ? "#00ff00" : "#ff0033"}`,
+    borderRight: `6px solid ${mqttConnected ? "#00ff00" : "#ff0033"}`,
+    boxShadow: `0 0 30px ${mqttConnected ? "#00ff00" : "#ff0033"}`
+  }}
+>
+
 
   {/* HEADER */}
   <div style={ui.header}>
@@ -564,12 +654,26 @@ return (
  <div style={ui.mainSection}>
 
   {/* LEFT BOX */}
-<div style={ui.leftBox}>
-
+<div
+  style={{
+    ...ui.leftBox,
+    border: `4px solid ${dynamicBorderColor || "#d000ff"}`
+  }}
+>
   {/* Stage Row */}
   <div style={ui.stageRow}>
-    <div style={ui.stageCircleOuter}>
-      <div style={ui.stageCircleInner}>
+    <div
+  style={{
+    ...ui.stageCircleOuter,
+    border: `4px solid ${dynamicBorderColor || "#d000ff"}`
+  }}
+>
+     <div
+  style={{
+    ...ui.stageCircleInner,
+    border: `4px solid ${isPass ? "#00ff00" : "#00ff00"}`
+  }}
+>
         {stageNumber}
       </div>
     </div>
@@ -577,7 +681,7 @@ return (
     <div style={ui.stageNameBox}>
       <div style={ui.stageTitle}>Stage</div>
       <div style={ui.stageName}>
-        {routeData?.routeStep?.stage_name || "Part Scanning"}
+        {routeData?.routeStep?.stage_name || "-"}
       </div>
     </div>
   </div>
@@ -627,28 +731,54 @@ return (
   </div>
 
   {/* RIGHT BOX */}
-  <div style={ui.rightBox}>
-    <div style={ui.vinDisplay}>
-      {vin || "-"}
-    </div>
+  <div
+  style={{
+    ...ui.rightBox,
+   border: `4px solid ${dynamicBorderColor || "#00cfff"}`
+  }}
+>
+  <div style={ui.vinContainer}>
+  <span style={ui.vinLabel}>VIN :</span>
+  <span style={ui.vinValue}>{vin || "-"}</span>
+</div>
 
 {/* SCAN ROW */}
-<div style={ui.scanRow}>
+<div style={{ ...ui.scanRow, display: "flex", alignItems: "center", gap: 15 }}>
+  
   <div style={ui.scanLabel}>Scanned Data</div>
 
   <input
     ref={scanInputRef}
     value={scannedValue}
+    disabled={
+      finalResult === "PASS" ||
+      !vin ||
+      !routeData
+    }
     onChange={(e)=>setScannedValue(e.target.value)}
     onKeyDown={(e)=>e.key==="Enter" && handleScan()}
-    style={ui.scanInput}
+    style={{
+      ...ui.scanInput,
+      width: 200   // 🔥 reduced width
+    }}
   />
+
+  {/* Previous Scan Display */}
+  <div style={{
+      minWidth: 180,
+      fontWeight: "bold",
+      color: "#00ffff"
+  }}>
+    {lastScanText}
+  </div>
+
 </div>
 
 
 <div
   style={{
     ...ui.resultBox,
+    border: `4px solid ${dynamicBorderColor || "#00ff00"}`,
     background:
       finalResult === "PASS"
         ? "#00ff00"
@@ -678,7 +808,7 @@ return (
     </thead>
     <tbody>
       {parts.map((row,i)=>(
-        <tr key={i}>
+     <tr key={i} style={getRowStyle(row)}>
           <td style={ui.td}>{row.sku}</td>
           <td style={ui.td}>{row.name}</td>
           <td style={ui.td}>{row.qty}</td>
@@ -692,7 +822,25 @@ return (
   </div>
 
 </div>
-
+  {alert.type && (
+  <div
+    style={{
+     
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: 20,
+      // background:
+      //   alert.type === "error"
+      //     ? "#ff0033"
+      //     : alert.type === "warning"
+      //     ? "#ffa500"
+      //     : "#00ff00",
+      color: alert.type === "success" ? "#03c50c" : "#fc8383"
+    }}
+  >
+    {alert.message}
+  </div>
+)}
 
   {/* FOOTER */}
   <div style={ui.footer}>
@@ -761,7 +909,7 @@ logoRight:{position:"absolute",right:15,height:60},
 
 topRow:{
   display:"flex",
-  justifyContent:"space-around",
+  justifyContent:"space-between",
   padding:"4px 20px",
   fontSize:25,
   fontWeight: "Bold",
@@ -786,7 +934,7 @@ statusRow:{
 mainSection:{
   display:"flex",
   flex:1,
-  padding:"10px 10px 90px 10px",
+  padding:"10px 10px 30px 10px",
   alignItems:"stretch",
   gap:20
 },
@@ -938,6 +1086,28 @@ rightBox:{
   display:"flex",
   flexDirection:"column",
   gap:15
+},
+
+vinContainer:{
+  background:"#ccc",
+  color:"#000",
+  padding:10,
+  borderRadius:10,
+  fontSize:22,
+  fontWeight:"bold",
+  display:"flex",
+  gap:15,
+  alignItems:"center"
+},
+
+vinLabel:{
+  color:"#000",
+  fontWeight:"bold"
+},
+
+vinValue:{
+  color:"#000",
+  letterSpacing:2
 },
 
 th:{

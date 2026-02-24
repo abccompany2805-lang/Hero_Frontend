@@ -281,108 +281,146 @@ const filteredRecipes = useMemo(() => {
       </div>
 
       {/* ================= MODAL ================= */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1050,
-          }}
+{showModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1050,
+    }}
+  >
+    <div
+      className="bg-white rounded-4 shadow p-4"
+      style={{
+        width: 600,
+        maxHeight: "85vh",
+        overflowY: "auto",
+      }}
+    >
+      <h5 className="mb-4">
+        {isEditing ? "Edit Recipe" : "Add Recipe"}
+      </h5>
+
+      {/* ================= BASIC SELECTIONS ================= */}
+
+      <div className="mb-3">
+        <label className="form-label text-secondary" style={{ fontWeight: 400 }}>
+          Recipe
+        </label>
+        <select
+          className="form-select"
+          value={formData.recipe_id}
+          onChange={(e) =>
+            setFormData({ ...formData, recipe_id: e.target.value })
+          }
         >
-          <div className="bg-white rounded-4 shadow p-4" style={{ width: 520 }}>
-            <h5 className="mb-3">
-              {isEditing ? "Edit Recipe" : "Add Recipe"}
-            </h5>
-            <select
-  className="form-control mb-2"
-  value={formData.recipe_id}
-  onChange={(e) =>
-    setFormData({ ...formData, recipe_id: e.target.value })
-  }
->
-  <option value="">Select Recipe</option>
-  {recipeMasters.map((r) => (
-    <option key={r.recipe_id} value={r.recipe_id}>
-      {r.recipe_name}
-    </option>
-  ))}
-</select>
+          <option value="">Select Recipe</option>
+          {recipeMasters.map((r) => (
+            <option key={r.recipe_id} value={r.recipe_id}>
+              {r.recipe_name}
+            </option>
+          ))}
+        </select>
+      </div>
 
-            <select
-              className="form-control mb-2"
-              value={formData.tool_id}
-              onChange={(e) =>
-                setFormData({ ...formData, tool_id: e.target.value })
-              }
+      <div className="mb-3">
+        <label className="form-label text-secondary" style={{ fontWeight: 400 }}>
+          Tool
+        </label>
+        <select
+          className="form-select"
+          value={formData.tool_id}
+          onChange={(e) =>
+            setFormData({ ...formData, tool_id: e.target.value })
+          }
+        >
+          <option value="">Select Tool</option>
+          {tools.map((t) => (
+            <option key={t.tool_id} value={t.tool_id}>
+              {t.tool_code}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mb-4">
+        <label className="form-label text-secondary" style={{ fontWeight: 400 }}>
+          Program
+        </label>
+        <select
+          className="form-select"
+          value={formData.program_id}
+          onChange={(e) =>
+            setFormData({ ...formData, program_id: e.target.value })
+          }
+        >
+          <option value="">Select Program</option>
+          {programs.map((p) => (
+            <option key={p.program_id} value={p.program_id}>
+              {p.program_no} - {p.program_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* ================= PARAMETERS (2 COLUMN GRID) ================= */}
+
+      <div className="row">
+        {[
+          "set_torque",
+          "set_angle",
+          "set_pressure",
+          "set_leak_limit",
+          "lsl",
+          "usl",
+          "unit",
+          "tightening_cnt",
+        ].map((field) => (
+          <div className="col-md-6 mb-3" key={field}>
+            <label
+              className="form-label text-secondary"
+              style={{ fontWeight: 400, fontSize: "14px" }}
             >
-              <option value="">Select Tool</option>
-              {tools.map((t) => (
-                <option key={t.tool_id} value={t.tool_id}>
-                  {t.tool_code}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="form-control mb-2"
-              value={formData.program_id}
+              {field.replace(/_/g, " ").toUpperCase()}
+            </label>
+            <input
+              className="form-control form-control-sm"
+              placeholder={`Enter ${field.replace(/_/g, " ")}`}
+              value={formData[field] || ""}
               onChange={(e) =>
-                setFormData({ ...formData, program_id: e.target.value })
+                setFormData({
+                  ...formData,
+                  [field]: e.target.value,
+                })
               }
-            >
-              <option value="">Select Program</option>
-              {programs.map((p) => (
-                <option key={p.program_id} value={p.program_id}>
-                  {p.program_no} - {p.program_name}
-                </option>
-              ))}
-            </select>
-
-            {[
-              "set_torque",
-              "set_angle",
-              "set_pressure",
-              "set_leak_limit",
-              "lsl",
-              "usl",
-              "unit",
-              "tightening_cnt",
-            ].map((field) => (
-              <input
-                key={field}
-                className="form-control mb-2"
-                placeholder={field.replace(/_/g, " ")}
-                value={formData[field] || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    [field]: e.target.value,
-                  })
-                }
-              />
-            ))}
-
-            <div className="d-flex justify-content-end gap-2">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={handleSave}
-              >
-                Save
-              </button>
-            </div>
+            />
           </div>
-        </div>
-      )}
+        ))}
+      </div>
+
+      {/* ================= BUTTONS ================= */}
+
+      <div className="d-flex justify-content-end gap-2 mt-3">
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowModal(false)}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={handleSave}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ================= VIEW MODAL ================= */}
      {/* ================= VIEW MODAL ================= */}

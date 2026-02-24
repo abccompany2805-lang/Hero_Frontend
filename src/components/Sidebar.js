@@ -315,12 +315,12 @@ const Sidebar = ({ isOpen, onClose }) => {
 
             <li className="nav-item">
               <NavLink
-                to="/spindle-master"
+                to="/logical-name-master"
                 className="nav-link"
                 onClick={onClose}
               >
                 <i className="bi bi-diagram-3"></i>
-                <span>Spindle Master</span>
+                <span>Logical Name Master</span>
               </NavLink>
             </li>
 

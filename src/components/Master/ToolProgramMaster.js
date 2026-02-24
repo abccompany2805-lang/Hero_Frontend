@@ -282,90 +282,112 @@ const ToolProgramMaster = () => {
       </div>
 
       {/* ================= MODAL ================= */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1050,
-          }}
+{showModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1050,
+    }}
+  >
+    <div className="bg-white rounded-4 shadow p-4" style={{ width: 520 }}>
+      <h5 className="mb-4">
+        {isEditing ? "Edit Tool Program" : "Add Tool Program"}
+      </h5>
+
+      {/* Tool Selection */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Tool <span className="text-danger">*</span>
+        </label>
+        <select
+          className="form-select"
+          value={formData.tool_id}
+          onChange={(e) =>
+            setFormData({ ...formData, tool_id: e.target.value })
+          }
         >
-          <div className="bg-white rounded-4 shadow p-4" style={{ width: 480 }}>
-            <h5 className="mb-3">
-              {isEditing ? "Edit Tool Program" : "Add Tool Program"}
-            </h5>
+          <option value="">Select Tool</option>
+          {tools.map((t) => (
+            <option key={t.tool_id} value={t.tool_id}>
+              {t.tool_code}
+            </option>
+          ))}
+        </select>
+      </div>
 
-            <select
-              className="form-control mb-2"
-              value={formData.tool_id}
-              onChange={(e) =>
-                setFormData({ ...formData, tool_id: e.target.value })
-              }
-            >
-              <option value="">Select Tool</option>
-              {tools.map((t) => (
-                <option key={t.tool_id} value={t.tool_id}>
-                  {t.tool_code}
-                </option>
-              ))}
-            </select>
+      {/* Program Number */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Program No <span className="text-danger">*</span>
+        </label>
+        <input
+          type="number"
+          className="form-control"
+          placeholder="Enter Program Number"
+          value={formData.program_no}
+          onChange={(e) =>
+            setFormData({ ...formData, program_no: e.target.value })
+          }
+        />
+      </div>
 
-            <input
-              type="number"
-              className="form-control mb-2"
-              placeholder="Program No"
-              value={formData.program_no}
-              onChange={(e) =>
-                setFormData({ ...formData, program_no: e.target.value })
-              }
-            />
+      {/* Program Name */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Program Name <span className="text-danger">*</span>
+        </label>
+        <input
+          className="form-control"
+          placeholder="Enter Program Name"
+          value={formData.program_name}
+          onChange={(e) =>
+            setFormData({ ...formData, program_name: e.target.value })
+          }
+        />
+      </div>
 
-            <input
-              className="form-control mb-2"
-              placeholder="Program Name"
-              value={formData.program_name}
-              onChange={(e) =>
-                setFormData({ ...formData, program_name: e.target.value })
-              }
-            />
+      {/* Active */}
+      <div className="form-check mb-4">
+        <input
+          className="form-check-input"
+          type="checkbox"
+          checked={formData.is_active}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              is_active: e.target.checked,
+            })
+          }
+        />
+        <label className="form-check-label fw-semibold">
+          Active
+        </label>
+      </div>
 
-            <div className="form-check mb-3">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                checked={formData.is_active}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    is_active: e.target.checked,
-                  })
-                }
-              />
-              <label className="form-check-label">Active</label>
-            </div>
-
-            <div className="d-flex justify-content-end gap-2">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={handleSave}
-                disabled={saveMutation.isPending}
-              >
-                {saveMutation.isPending ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Buttons */}
+      <div className="d-flex justify-content-end gap-2">
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowModal(false)}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={handleSave}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? "Saving..." : "Save"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ================= VIEW MODAL ================= */}
       {showView && viewData && (

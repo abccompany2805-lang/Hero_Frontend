@@ -5,6 +5,7 @@ import API_BASE_URL from "../../config";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 
+
 const emptyForm = {
   line_code: "",
   line_name: "",
@@ -30,6 +31,7 @@ const LineMaster = () => {
   const [showModal, setShowModal] = useState(false);
   const [showView, setShowView] = useState(false);
   const [viewData, setViewData] = useState(null);
+  const [errors, setErrors] = useState({});
 
   /* =====================================================
      FETCH PLANTS (FOR DROPDOWN)
@@ -154,7 +156,47 @@ const saveMutation = useMutation({
 //   }
 // };
 
+
+const validateForm = () => {
+  const newErrors = {};
+
+  // Required checks
+  if (!formData.plant_id) {
+    newErrors.plant_id = "Plant is required";
+  }
+
+  if (!formData.line_code.trim()) {
+    newErrors.line_code = "Line Code is required";
+  }
+
+  if (!formData.line_name.trim()) {
+    newErrors.line_name = "Line Name is required";
+  }
+
+  if (!formData.pitch_mm) {
+    newErrors.pitch_mm = "Pitch (mm) is required";
+  }
+
+  // Duplicate check (case-insensitive)
+  const duplicate = allLines.find(
+    (l) =>
+      l.line_code?.toLowerCase() === formData.line_code.toLowerCase() &&
+      l.line_id !== formData.line_id
+  );
+
+  if (duplicate) {
+    newErrors.line_code = "Line Code already exists";
+  }
+
+  setErrors(newErrors);
+
+  return Object.keys(newErrors).length === 0;
+};
+
+
 const handleSave = () => {
+  if (!validateForm()) return;
+
   const payload = {
     ...formData,
     pitch_mm: Number(formData.pitch_mm),
@@ -709,64 +751,145 @@ const handleDelete = (line_id) => {
     )}
 
     {/* ================= VIEW MODAL ================= */}
-    {showView && viewData && (
+{showView && viewData && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15, 23, 42, 0.45)",
+      backdropFilter: "blur(4px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1050,
+    }}
+  >
+    <div
+      style={{
+        width: 480,
+        borderRadius: 16,
+        background: "#ffffff",
+        boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
+        overflow: "hidden",
+        animation: "fadeInScale 0.2s ease-out",
+      }}
+    >
+      {/* ===== HEADER ===== */}
       <div
         style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1050,
+          padding: "16px 20px",
+          background: "#f8fafc",
+          borderBottom: "3px solid #f32c1e",
         }}
       >
-        <div className="bg-white rounded-4 shadow p-4" style={{ width: 420 }}>
-          <h5 className="mb-3">Line Details</h5>
+        <h5
+          style={{
+            margin: 0,
+            fontWeight: 600,
+            color: "#1e293b",
+            letterSpacing: "0.3px",
+          }}
+        >
+          Line Details
+        </h5>
+      </div>
 
-          <div className="d-flex flex-column gap-2">
+      {/* ===== BODY ===== */}
+      <div style={{ padding: "20px" }}>
+        <div className="d-flex flex-column gap-3">
           {Object.entries(viewData)
-  .filter(([k]) => k !== "line_id")
-  .map(([k, v]) => (
-    <div key={k} className="d-flex justify-content-between align-items-start">
-      
-      {/* ===== FIELD LABEL FIX ===== */}
-      <strong className="text-muted">
-        {k === "plant_id"
-          ? "Plant Name"
-          : k === "is_active"
-          ? "Status"
-          : k.replace(/_/g, " ")}
-      </strong>
+            .filter(([k]) => k !== "line_id")
+            .map(([k, v]) => (
+              <div
+                key={k}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingBottom: "8px",
+                  borderBottom: "1px solid #f1f5f9",
+                }}
+              >
+                {/* ===== LABEL ===== */}
+                <span
+                  style={{
+                    fontSize: "14px",
+                    color: "#64748b",
+                    fontWeight: 600,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {k === "plant_id"
+                    ? "Plant Name"
+                    : k === "is_active"
+                    ? "Status"
+                    : k.replace(/_/g, " ")}
+                </span>
 
-      {/* ===== FIELD VALUE FIX ===== */}
-      <span className="text-end">
-        {k === "plant_id" ? (
-          getPlantName(v)
-        ) : k === "is_active" ? (
-          <span className={`badge ${v ? "bg-success" : "bg-danger"}`}>
-            {v ? "Active" : "Inactive"}
-          </span>
-        ) : (
-          v ?? "-"
-        )}
-      </span>
-    </div>
-))}
+                {/* ===== VALUE ===== */}
+                <span
+                  style={{
+                    fontSize: "15px",
+                    fontWeight: 500,
+                    color: "#0f172a",
+                  }}
+                >
+                  {k === "plant_id" ? (
+                    getPlantName(v)
+                  ) : k === "is_active" ? (
+                    <span
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: "20px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        backgroundColor: v ? "#dcfce7" : "#fee2e2",
+                        color: v ? "#166534" : "#991b1b",
+                      }}
+                    >
+                      {v ? "Active" : "Inactive"}
+                    </span>
+                  ) : (
+                    v ?? "-"
+                  )}
+                </span>
+              </div>
+            ))}
+        </div>
 
-          </div>
-
-          <div className="text-end mt-3">
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowView(false)}
-            >
-              Close
-            </button>
-          </div>
+        {/* ===== FOOTER ===== */}
+        <div className="text-end mt-4">
+          <button
+            className="btn btn-outline-secondary btn-sm px-4"
+            onClick={() => setShowView(false)}
+            style={{
+              borderRadius: 8,
+              fontWeight: 500,
+            }}
+          >
+            Close
+          </button>
         </div>
       </div>
-    )}
+    </div>
+
+    {/* Animation */}
+    <style>
+      {`
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+      `}
+    </style>
+  </div>
+)}
 
   </div>
 );

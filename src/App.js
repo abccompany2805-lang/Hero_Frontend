@@ -422,6 +422,9 @@ import PLC_TagMaster from "./components/Master/PLC_TagMaster"
 import RecipePartScan from "./components/Master/RecipePartScan"
 import Login from "./components/Auth/Login";
 import RouteMaster from "./components/Master/RouteMaster";
+import LogicalNameMaster from "./components/Master/LogicalName";
+
+import RegisterUser from "./components/Auth/RegisterUser";
 
 
 function App() {
@@ -433,7 +436,8 @@ const hideLayout =
   location.pathname.startsWith("/dctool-monitoring/") ||
   location.pathname.startsWith("/part-scanning-monitoring/") ||
   location.pathname.startsWith("/leaktest-monitoring/") ||
-  location.pathname === "/login";
+  location.pathname === "/login" ||
+  location.pathname === "/signup";
 
 
   return (
@@ -463,6 +467,7 @@ const hideLayout =
           <Routes>
             <Route path="/" element={<Dashboard/>} />
             <Route path="/login" element={<Login/>}/>
+            <Route path="/signup" element={<RegisterUser />} />
 
             <Route path="/part-scanning-monitoring/:stageNo" element={<PartScanningMonitoring />} />
 <Route path="/dctool-monitoring/:stageNo" element={<DCToolMonitoring />} />
@@ -498,6 +503,7 @@ const hideLayout =
             <Route path = "/recipe-process-master" element = {<RecipeProcessMaster/>}/>
             <Route path = "/plc-tag-master" element = {<PLC_TagMaster/>} />
             <Route path = "/route-master" element = {<RouteMaster />} />
+            <Route path = "/logical-name-master" element = {<LogicalNameMaster />} />
           </Routes>
         </main>
       </div>

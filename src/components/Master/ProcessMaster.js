@@ -138,7 +138,12 @@ const ProcessMaster = () => {
 
       {/* HEADER */}
       <div className="card shadow-sm rounded-4 mb-2 mx-2"
-        style={{ borderLeft: "5px solid #dc3545" }}>
+         style={{
+          borderLeft: "5px solid #dc3545",
+          borderTop: 0,
+          borderRight: 0,
+          borderBottom: 0,
+        }}>
         <div className="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
           <h4 className="fw-bold mb-1">Operation Master</h4>
 
@@ -321,115 +326,154 @@ const ProcessMaster = () => {
 )}
 
       {/* ADD / EDIT MODAL */}
-      {showModal && (
-        <div style={modalStyle}>
-          <div className="bg-white rounded-4 shadow p-4" style={{ width: 520 }}>
-            <h5 className="mb-3">
-              {isEditing ? "Edit Operation" : "Add Operation"}
-            </h5>
+{showModal && (
+  <div style={modalStyle}>
+    <div className="bg-white rounded-4 shadow p-4" style={{ width: 520 }}>
+      <h5 className="mb-4">
+        {isEditing ? "Edit Operation" : "Add Operation"}
+      </h5>
 
-            <input className="form-control mb-2"
-              placeholder="Operation Code"
-              disabled={isEditing}
-              value={formData.operation_code}
-              onChange={(e) =>
-                setFormData({ ...formData, operation_code: e.target.value })
-              }
-            />
+      {/* Operation Code */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Operation Code <span className="text-danger">*</span>
+        </label>
+        <input
+          className="form-control"
+          placeholder="Enter Operation Code"
+          disabled={isEditing}
+          value={formData.operation_code}
+          onChange={(e) =>
+            setFormData({ ...formData, operation_code: e.target.value })
+          }
+        />
+      </div>
 
-            <input className="form-control mb-2"
-              placeholder="Operation Name"
-              value={formData.operation_name}
-              onChange={(e) =>
-                setFormData({ ...formData, operation_name: e.target.value })
-              }
-            />
+      {/* Operation Name */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Operation Name <span className="text-danger">*</span>
+        </label>
+        <input
+          className="form-control"
+          placeholder="Enter Operation Name"
+          value={formData.operation_name}
+          onChange={(e) =>
+            setFormData({ ...formData, operation_name: e.target.value })
+          }
+        />
+      </div>
 
-            {/* OPERATION TYPE */}
-            <select
-              className="form-control mb-2"
-              value={formData.operation_type}
-              onChange={(e) =>
-                setFormData({ ...formData, operation_type: e.target.value })
-              }
-            >
-              <option value="">Select Operation Type</option>
-              <option value="PART_SCAN">Part Scan</option>
-              <option value="PROCESS">Process</option>
-              <option value="POKA_YOKE">Pokayoke</option>
-            </select>
+      {/* Operation Type */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Operation Type <span className="text-danger">*</span>
+        </label>
+        <select
+          className="form-select"
+          value={formData.operation_type}
+          onChange={(e) =>
+            setFormData({ ...formData, operation_type: e.target.value })
+          }
+        >
+          <option value="">Select Operation Type</option>
+          <option value="PART_SCAN">Part Scan</option>
+          <option value="PROCESS">Process</option>
+          <option value="POKA_YOKE">Pokayoke</option>
+        </select>
+      </div>
 
-            {/* PROCESS TYPE (only if PROCESS) */}
-            {formData.operation_type === "PROCESS" && (
-             <select
-  className="form-control mb-2"
-  value={formData.process_type || ""}
-  onChange={(e) =>
-    setFormData({ ...formData, process_type: e.target.value })
-  }
->
-  <option value="">Select Process Type</option>
-  <option value="DC_TOOL">DC TOOL</option>
-  <option value="LEAK_TEST">LEAK TEST</option>
-  <option value="VISION">VISION</option>
-  <option value="MANUAL"> MANUAL</option>
-</select>
-
-            )}
-
-            {/* STAGE DROPDOWN */}
-            <select
-              className="form-control mb-2"
-              value={formData.qgate_stage_id || ""}
-              onChange={(e) =>
-                setFormData({ ...formData, qgate_stage_id: e.target.value })
-              }
-            >
-              <option value="">Select Stage</option>
-              {stages.map((stage) => (
-                <option key={stage.stage_id} value={stage.stage_id}>
-                  Stage {stage.stage_no}
-                </option>
-              ))}
-            </select>
-
-            <div className="form-check mb-2">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                checked={formData.is_ctq}
-                onChange={(e) =>
-                  setFormData({ ...formData, is_ctq: e.target.checked })
-                }
-              />
-              <label className="form-check-label">CTQ</label>
-            </div>
-
-            <div className="form-check mb-3">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                checked={formData.is_active}
-                onChange={(e) =>
-                  setFormData({ ...formData, is_active: e.target.checked })
-                }
-              />
-              <label className="form-check-label">Active</label>
-            </div>
-
-            <div className="d-flex justify-content-end gap-2">
-              <button className="btn btn-secondary"
-                onClick={() => setShowModal(false)}>
-                Cancel
-              </button>
-              <button className="btn btn-danger"
-                onClick={handleSave}>
-                Save
-              </button>
-            </div>
-          </div>
+      {/* Process Type */}
+      {formData.operation_type === "PROCESS" && (
+        <div className="mb-3">
+          <label className="form-label fw-semibold">
+            Process Type <span className="text-danger">*</span>
+          </label>
+          <select
+            className="form-select"
+            value={formData.process_type || ""}
+            onChange={(e) =>
+              setFormData({ ...formData, process_type: e.target.value })
+            }
+          >
+            <option value="">Select Process Type</option>
+            <option value="DC_TOOL">DC TOOL</option>
+            <option value="LEAK_TEST">LEAK TEST</option>
+            <option value="VISION">VISION</option>
+            <option value="MANUAL">MANUAL</option>
+          </select>
         </div>
       )}
+
+      {/* Stage Dropdown */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          Stage <span className="text-danger">*</span>
+        </label>
+        <select
+          className="form-select"
+          value={formData.qgate_stage_id || ""}
+          onChange={(e) =>
+            setFormData({ ...formData, qgate_stage_id: e.target.value })
+          }
+        >
+          <option value="">Select Stage</option>
+          {stages.map((stage) => (
+            <option key={stage.stage_id} value={stage.stage_id}>
+              Stage {stage.stage_no}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* CTQ */}
+      <div className="form-check mb-2">
+        <input
+          className="form-check-input"
+          type="checkbox"
+          checked={formData.is_ctq}
+          onChange={(e) =>
+            setFormData({ ...formData, is_ctq: e.target.checked })
+          }
+        />
+        <label className="form-check-label fw-semibold">
+          Is CTQ (Critical To Quality)
+        </label>
+      </div>
+
+      {/* Active */}
+      <div className="form-check mb-4">
+        <input
+          className="form-check-input"
+          type="checkbox"
+          checked={formData.is_active}
+          onChange={(e) =>
+            setFormData({ ...formData, is_active: e.target.checked })
+          }
+        />
+        <label className="form-check-label fw-semibold">
+          Active
+        </label>
+      </div>
+
+      {/* Buttons */}
+      <div className="d-flex justify-content-end gap-2">
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowModal(false)}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={handleSave}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

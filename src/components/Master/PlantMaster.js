@@ -28,6 +28,7 @@ const PlantMaster = () => {
   const [showModal, setShowModal] = useState(false);
   const [showView, setShowView] = useState(false);
   const [viewData, setViewData] = useState(null);
+  const [errors, setErrors] = useState({});
 
   /* =====================================================
      REACT QUERY : FETCH PLANTS
@@ -77,9 +78,34 @@ const PlantMaster = () => {
     },
   });
 
-  const handleSave = () => {
-    saveMutation.mutate(formData);
-  };
+
+  const validateForm = () => {
+  const newErrors = {};
+
+  if (!formData.plant_code.trim()) {
+    newErrors.plant_code = "Plant Code is required";
+  }
+
+  if (!formData.plant_name.trim()) {
+    newErrors.plant_name = "Plant Name is required";
+  }
+
+  if (!formData.timezone.trim()) {
+    newErrors.timezone = "Time Zone is required";
+  }
+
+  setErrors(newErrors);
+
+  return Object.keys(newErrors).length === 0;
+};
+
+
+
+const handleSave = () => {
+  if (!validateForm()) return;
+
+  saveMutation.mutate(formData);
+};
 
   /* =====================================================
      DELETE MUTATION
@@ -261,6 +287,8 @@ const PlantMaster = () => {
           </tbody>
         </table>
       </div>
+
+
       {showModal && (
       <div
         style={{
@@ -283,15 +311,21 @@ const PlantMaster = () => {
   { k: "plant_name", l: "Plant Name" },
   { k: "timezone", l: "Time Zone" },
 ].map(({ k, l }) => (
-  <div className="mb-2" key={k}>
-    <label className="form-label">{l}</label>
+  <div className="mb-3" key={k}>
+    <label className="form-label fw-semibold text-muted">{l}</label>
     <input
-      className="form-control"
+      className={`form-control ${errors[k] ? "is-invalid" : ""}`}
       value={formData[k]}
-      onChange={(e) =>
-        setFormData({ ...formData, [k]: e.target.value })
-      }
+      onChange={(e) => {
+        setFormData({ ...formData, [k]: e.target.value });
+        setErrors({ ...errors, [k]: "" });
+      }}
     />
+    {errors[k] && (
+      <div className="invalid-feedback">
+        {errors[k]}
+      </div>
+    )}
   </div>
 ))}
 <div className="form-check mt-2">
@@ -315,73 +349,150 @@ const PlantMaster = () => {
             >
               Cancel
             </button>
-            <button className="btn btn-danger" onClick={handleSave}>
-              Save
-            </button>
+            <button
+  className="btn btn-danger"
+  onClick={handleSave}
+  disabled={saveMutation.isPending}
+>
+  {saveMutation.isPending ? "Saving..." : "Save"}
+</button>
           </div>
         </div>
       </div>
     )}
 
       {/* ================= VIEW MODAL ================= */}
-      {showView && viewData && (
-        <div
+{showView && viewData && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15, 23, 42, 0.45)",
+      backdropFilter: "blur(4px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1050,
+    }}
+  >
+    <div
+      style={{
+        width: 480,
+        borderRadius: 16,
+        background: "#ffffff",
+        boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
+        overflow: "hidden",
+        animation: "fadeInScale 0.2s ease-out",
+      }}
+    >
+      {/* ===== HEADER ===== */}
+      <div
+        style={{
+          padding: "16px 20px",
+          background: "#f8fafc",
+          borderBottom: "3px solid #f32c1e",
+        }}
+      >
+        <h5
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1050,
+            margin: 0,
+            fontWeight: 600,
+            color: "#1e293b",
+            letterSpacing: "0.3px",
           }}
         >
-          <div
-            className="bg-white rounded-4 shadow p-4"
-            style={{ width: 420 }}
-          >
-            <h5 className="mb-3">Plant Details</h5>
+          Plant Details
+        </h5>
+      </div>
 
-            <div className="d-flex flex-column gap-2">
-              {Object.entries(viewData)
-                .filter(([k]) => k !== "plant_id")
-                .map(([k, v]) => (
-                  <div
-                    key={k}
-                    className="d-flex justify-content-between align-items-start"
-                  >
-                    <strong className="text-muted">
-                      {k.replace(/_/g, " ")}
-                    </strong>
-
-                    <span className="text-end">
-                      {k === "is_active" ? (
-                        <span
-                          className={`badge ${
-                            v ? "bg-success" : "bg-danger"
-                          }`}
-                        >
-                          {v ? "Active" : "Inactive"}
-                        </span>
-                      ) : (
-                        v ?? "-"
-                      )}
-                    </span>
-                  </div>
-                ))}
-            </div>
-
-            <div className="text-end mt-3">
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowView(false)}
+      {/* ===== BODY ===== */}
+      <div style={{ padding: "20px" }}>
+        <div className="d-flex flex-column gap-3">
+          {Object.entries(viewData)
+            .filter(([k]) => k !== "plant_id")
+            .map(([k, v]) => (
+              <div
+                key={k}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingBottom: "8px",
+                  borderBottom: "1px solid #f1f5f9",
+                }}
               >
-                Close
-              </button>
-            </div>
-          </div>
+                <span
+                  style={{
+                    fontSize: "16px",
+                    color: "#64748b",
+                    fontWeight: 500,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {k.replace(/_/g, " ")}
+                </span>
+
+                <span
+                  style={{
+                    fontSize: "18px",
+                    fontWeight: 500,
+                    color: "#0f172a",
+                  }}
+                >
+                  {k === "is_active" ? (
+                    <span
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: "20px",
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        backgroundColor: v ? "#dcfce7" : "#fee2e2",
+                        color: v ? "#166534" : "#991b1b",
+                      }}
+                    >
+                      {v ? "Active" : "Inactive"}
+                    </span>
+                  ) : (
+                    v ?? "-"
+                  )}
+                </span>
+              </div>
+            ))}
         </div>
-      )}
+
+        {/* ===== FOOTER ===== */}
+        <div className="text-end mt-4">
+          <button
+            className="btn btn-outline-secondary btn-sm px-4"
+            onClick={() => setShowView(false)}
+            style={{
+              borderRadius: 8,
+              fontWeight: 500,
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* Animation */}
+    <style>
+      {`
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+      `}
+    </style>
+  </div>
+)}
     </div>
   );
 };

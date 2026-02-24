@@ -245,109 +245,130 @@ const RecipePartScanMaster = () => {
       </div>
 
       {/* MODAL */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1050,
-          }}
-        >
-          <div
-            className="bg-white rounded-4 shadow p-4"
-            style={{ width: 450 }}
-          >
-            <h5 className="mb-3">
-              {isEditing
-                ? "Edit Configuration"
-                : "Add Configuration"}
-            </h5>
+ {showModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1050,
+    }}
+  >
+    <div
+      className="bg-white rounded-4 shadow p-4"
+      style={{ width: 500 }}
+    >
+      <h5 className="mb-4">
+        {isEditing ? "Edit Configuration" : "Add Configuration"}
+      </h5>
 
-            {errorMessage && (
-              <div className="alert alert-danger py-2">
-                {errorMessage}
-              </div>
-            )}
-
-            <select
-              className="form-control mb-3"
-              value={formData.recipe_id}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  recipe_id: e.target.value,
-                })
-              }
-              disabled={isEditing}
-            >
-              <option value="">Select Recipe</option>
-              {recipes.map((r) => (
-                <option
-                  key={r.recipe_id}
-                  value={r.recipe_id}
-                  disabled={
-                    !isEditing &&
-                    usedRecipeIds.includes(r.recipe_id)
-                  }
-                >
-                  {r.recipe_name || r.recipe_id}
-                </option>
-              ))}
-            </select>
-
-            {[
-              {
-                key: "enforce_all_parts",
-                label: "Enforce All Parts",
-              },
-              {
-                key: "allow_manual_entry",
-                label: "Allow Manual Entry",
-              },
-              {
-                key: "allow_supervisor_override",
-                label: "Allow Supervisor Override",
-              },
-            ].map((item) => (
-              <div className="form-check mb-2" key={item.key}>
-                <input
-                  type="checkbox"
-                  className="form-check-input"
-                  checked={formData[item.key]}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      [item.key]: e.target.checked,
-                    })
-                  }
-                />
-                <label className="form-check-label">
-                  {item.label}
-                </label>
-              </div>
-            ))}
-
-            <div className="d-flex justify-content-end gap-2 mt-3">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={handleSave}
-              >
-                Save
-              </button>
-            </div>
-          </div>
+      {errorMessage && (
+        <div className="alert alert-danger py-2">
+          {errorMessage}
         </div>
       )}
+
+      {/* Recipe Selection */}
+      <div className="mb-4">
+        <label
+          className="form-label text-secondary"
+          style={{ fontWeight: 400 }}
+        >
+          Recipe
+        </label>
+        <select
+          className="form-select"
+          value={formData.recipe_id}
+          onChange={(e) =>
+            setFormData({
+              ...formData,
+              recipe_id: e.target.value,
+            })
+          }
+          disabled={isEditing}
+        >
+          <option value="">Select Recipe</option>
+          {recipes.map((r) => (
+            <option
+              key={r.recipe_id}
+              value={r.recipe_id}
+              disabled={
+                !isEditing &&
+                usedRecipeIds.includes(r.recipe_id)
+              }
+            >
+              {r.recipe_name || r.recipe_id}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Configuration Options */}
+      <div className="mb-2">
+        <label
+          className="form-label text-secondary"
+          style={{ fontWeight: 400 }}
+        >
+          Configuration Settings
+        </label>
+      </div>
+
+      {[
+        {
+          key: "enforce_all_parts",
+          label: "Enforce All Parts",
+        },
+        {
+          key: "allow_manual_entry",
+          label: "Allow Manual Entry",
+        },
+        {
+          key: "allow_supervisor_override",
+          label: "Allow Supervisor Override",
+        },
+      ].map((item) => (
+        <div className="form-check mb-2" key={item.key}>
+          <input
+            type="checkbox"
+            className="form-check-input"
+            checked={formData[item.key]}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                [item.key]: e.target.checked,
+              })
+            }
+          />
+          <label
+            className="form-check-label text-secondary"
+            style={{ fontWeight: 400 }}
+          >
+            {item.label}
+          </label>
+        </div>
+      ))}
+
+      {/* Buttons */}
+      <div className="d-flex justify-content-end gap-2 mt-4">
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowModal(false)}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={handleSave}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

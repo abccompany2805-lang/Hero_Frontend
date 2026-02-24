@@ -1,349 +1,325 @@
-
-
-
-
-// import React, { useState } from "react";
-// import { Card, Form, Button, Alert } from "react-bootstrap";
-// import { loginUser } from "../../Apis";   // ✅ USE API FILE
-// import { Link } from "react-router-dom";
-
-
-// const Login = () => {
-//   const [loginId, setLoginId] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [error, setError] = useState("");
-//   const [loading, setLoading] = useState(false);
-
-// const handleLogin = async (e) => {
-//   e.preventDefault();
-//   setError("");
-//   setLoading(true);
-
-//   try {
-// const res = await loginUser({
-//   username: loginId,
-//   password,
-// });
-
-
-// const { token, user } = res.data;
-
-
-//     if (user.role !== "ADMIN") {
-//       setError("Access denied. Admin login only.");
-//       return;
-//     }
-
-//     localStorage.setItem("token", token);
-//     localStorage.setItem("role", user.role);
-
-//     localStorage.setItem("user", JSON.stringify(user));
-
-//     window.location.href = "/";
-
-//   } catch (err) {
-//     setError(err.response?.data?.message || "Invalid email or password");
-//   } finally {
-//     setLoading(false);
-//   }
-// };
-
-//   // UI remains SAME (no change)
-//   return (
-//     <div
-//       className="d-flex justify-content-center align-items-center"
-//       style={{
-//         minHeight: "100vh",
-//         background: "linear-gradient(135deg, #eef2f7, #e3e9f1)",
-//         padding: "15px",
-//       }}
-//     >
-//       <style>
-//         {`
-//           .auth-card {
-//             animation: slideUpFade 0.6s ease-out forwards;
-//           }
-//           @keyframes slideUpFade {
-//             from { transform: translateY(40px); opacity: 0; }
-//             to { transform: translateY(0); opacity: 1; }
-//           }
-//         `}
-//       </style>
-
-//       <Card className="auth-card shadow-lg border-0" style={{ width: "100%", maxWidth: "420px", borderRadius: "16px" }}>
-//         <Card.Body className="p-4">
-//           {/* HEADER */}
-//           <div className="text-center mb-4">
-//             <h2 className="fw-bold mb-1">
-//               <span className="text-danger">O</span>perate
-//               <span className="text-danger">X</span>
-//             </h2>
-
-//           </div>
-
-//           {/* ERROR */}
-//           {error && <Alert variant="danger">{error}</Alert>}
-
-//           {/* FORM */}
-//           <Form onSubmit={handleLogin}>
-//             <Form.Group className="mb-3">
-//               <Form.Label>Username</Form.Label>
-//               <Form.Control
-//                 placeholder="Username  or Token No"
-//                 value={loginId}
-//                 onChange={(e) => setLoginId(e.target.value)}
-//                 required
-//               />
-//             </Form.Group>
-
-//             <Form.Group className="mb-4">
-//               <Form.Label>Password</Form.Label>
-//               <Form.Control
-//                 type="password"
-//                 placeholder="Enter password"
-//                 value={password}
-//                 onChange={(e) => setPassword(e.target.value)}
-//                 required
-//               />
-//             </Form.Group>
-
-//             <Button variant="primary" className="w-100 fw-semibold" type="submit" disabled={loading}>
-//               {loading ? "Logging in..." : "Login"}
-//             </Button>
-//           </Form>
-
-// <div className="text-center mt-4">
-//   Don’t have an account?{" "}
-//   <Link
-//     to="/register-user"
-//     className="text-primary text-decoration-none fw-semibold"
-//   >
-//     Register here
-//   </Link>
-// </div>
-
-//         </Card.Body>
-//       </Card>
-//     </div>
-//   );
-// };
-
-// export default Login;
-
-
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
+import { Eye, EyeOff, User, Lock  } from "lucide-react";
 import "bootstrap/dist/css/bootstrap.min.css";
-
-import Bike1 from "../../Assets/0011-removebg-preview.png";
-import Bike2 from "../../Assets/hqdefault-removebg-preview.png";
-import Bike3 from "../../Assets/szczecinpolandmay-2025harleydavidson-softail-springer-classic-260nw-2633606431-removebg-preview.png";
-import Background from "../../Assets/WhatsApp Image 2026-02-12 at 1.56.34 PM.jpeg";
-
-const bikes = [Bike1, Bike2, Bike3];
+import Bike from "../../Assets/x440-right-side-view-16.avif";
+import { Link } from "react-router-dom";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import API_BASE_URL from "../../config";
 
 export default function HeroLoginPage() {
-  const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState("visible");
   const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPhase("zoomIn");
+const [formData, setFormData] = useState({
+  username: "",
+  password: "",
+});
 
-      setTimeout(() => {
-        setIndex((prev) => (prev + 1) % bikes.length);
-        setPhase("zoomOut");
+const [loading, setLoading] = useState(false);
+const handleChange = (e) => {
+  setFormData({ ...formData, [e.target.name]: e.target.value });
+};
 
-        setTimeout(() => {
-          setPhase("visible");
-        }, 800);
-      }, 800);
-    }, 2000);
+const handleLogin = async (e) => {
+  e.preventDefault();
 
-    return () => clearInterval(interval);
-  }, []);
+  if (!formData.username || !formData.password) {
+    alert("Please enter username and password");
+    return;
+  }
 
-  const animationVariants = {
-    visible: { scale: 1, opacity: 1 },
-    zoomIn: { scale: 1.8, opacity: 0 },
-    zoomOut: { scale: 0.6, opacity: 1 },
-  };
+  try {
+    setLoading(true);
+
+    const res = await axios.post(
+      `${API_BASE_URL}/api/usersmaster/login`, // 🔥 Make sure backend route matches
+      {
+        username: formData.username,
+        password: formData.password,
+      }
+    );
+
+    // ✅ Store token
+    localStorage.setItem("token", res.data.token);
+    localStorage.setItem("user", JSON.stringify(res.data.user));
+
+    alert("Login successful");
+
+    navigate("/"); // redirect after login
+
+  } catch (error) {
+    alert(error.response?.data?.message || "Login failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
-    <div
-      className="container-fluid vh-100 position-relative"
-      style={{
-        overflow: "hidden",
-        backgroundImage: `url("../../Assets/WhatsApp Image 2026-02-12 at 1.56.34 PM.jpeg")`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
-      {/* Dark Overlay */}
-      <div
+    <div className="vh-100 d-flex position-relative" style={{ overflow: "hidden" }}>
+
+      {/* ================= THETAVEGA LOGO ================= */}
+      <img
+        src="/Artboard 2.png"
+        alt="Thetavega"
         style={{
           position: "absolute",
-          inset: 0,
-          backgroundColor: "rgba(0,0,0,0.55)",
+          top: "20px",
+          left: "40px",
+          height: "80px",
+          zIndex: 20,
         }}
       />
 
-      <div className="row h-100 position-relative">
-
-        {/* ================= LEFT BIKE AREA ================= */}
-        <div className="col-lg-7 d-flex align-items-center justify-content-center position-relative">
-
-          {/* Red Glow */}
-          <div
-            style={{
-              position: "absolute",
-              width: "500px",
-              height: "500px",
-              background: "radial-gradient(circle, rgba(220,0,0,0.5) 0%, transparent 70%)",
-              filter: "blur(80px)",
-              animation: "pulseGlow 3s infinite",
-            }}
-          />
-
-          <AnimatePresence mode="wait">
-            <motion.img
-              key={index}
-              src={bikes[index]}
-              initial="zoomOut"
-              animate={phase}
-              variants={animationVariants}
-              transition={{ duration: 0.8 }}
-              style={{
-                width: "600px",
-                maxWidth: "90%",
-                zIndex: 2,
-              }}
-            />
-          </AnimatePresence>
-        </div>
-
-        {/* ================= RIGHT LOGIN CARD ================= */}
-        <div className="col-lg-5 d-flex align-items-center justify-content-center">
-          <motion.div
-            initial={{ opacity: 0, x: 60 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-            className="card shadow-lg border-0"
-            style={{
-              width: "100%",
-              maxWidth: "420px",
-              borderRadius: "25px",
-              padding: "40px",
-              background: "white",
-              zIndex: 2,
-              display: "flex",
-            }}
-          >
-            {/* LOGOS */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <img
-                src="/hero-logo.png"
-                alt="Hero Logo"
-                style={{ height: "90px" }}
-              />
-              <img
-                src="/Artboard 4@600x.png"
-                alt="Company Logo"
-                style={{ height: "65px" }}
-              />
-            </div>
-            <div className="w-100 d-flex justify-content-center">  
-              <h4 className="fw-bold mb-4" style={{justifySelf: "center"}}>
-              Welcome to <span style={{color:"#f82828"}}>O</span>perate<span style={{color:"#f82828"}}>X</span>
-            </h4> 
-            </div>
+      {/* ================= LEFT 60% ================= */}
+      <div
+        style={{
+          width: "70%",
+          background: "linear-gradient(135deg, #666565 0%, #585757 100%)",
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {/* Soft Red Glow Behind Bike */}
+        <div
+          style={{
             
+            position: "absolute",
+            width: "600px",
+            height: "600px",
+            background:
+              "radial-gradient(circle, rgba(220,0,0,0.35) 0%, rgba(220,0,0,0.15) 40%, transparent 70%)",
+            filter: "blur(70px)",
+            animation: "pulseGlow 4s ease-in-out infinite",
+            transform: "translateX(-60px)", 
+          }}
+        />
 
-            {/* USERNAME */}
-            <div className="mb-3">
-              <label className="form-label text-muted">
-                Username
-              </label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Enter username"
-                style={{
-                  borderRadius: "12px",
-                  padding: "12px",
-                }}
-              />
-            </div>
-
-            {/* PASSWORD */}
-            <div className="mb-4 position-relative">
-              <label className="form-label text-muted">
-                Password
-              </label>
-              <input
-                type={showPassword ? "text" : "password"}
-                className="form-control"
-                placeholder="Enter password"
-                style={{
-                  borderRadius: "12px",
-                  padding: "12px",
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: "absolute",
-                  right: "15px",
-                  top: "42px",
-                  background: "transparent",
-                  border: "none",
-                }}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-
-            {/* LOGIN BUTTON */}
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              className="btn w-100"
-              style={{
-                backgroundColor: "#dc0000",
-                color: "white",
-                borderRadius: "12px",
-                padding: "12px",
-                fontWeight: "600",
-              }}
-            >
-              Login
-            </motion.button>
-
-            <div className="d-flex justify-content-between mt-3 small text-muted">
-              <div>
-                <input type="checkbox" className="me-1" />
-                Remember me
-              </div>
-              <div style={{ cursor: "pointer", color: "#dc0000" }}>
-                Forgot Password?
-              </div>
-            </div>
-          </motion.div>
-        </div>
+        {/* Bike */}
+        <img
+          src={Bike}
+          alt="Bike"
+          style={{
+            width: "750px",
+            position: "relative",
+            zIndex: 2,
+            transform: "translateX(-60px)", 
+          }}
+        />
       </div>
 
-      {/* Glow Animation Keyframe */}
-      <style>
-        {`
-          @keyframes pulseGlow {
-            0% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(1); opacity: 0.6; }
-          }
-        `}
-      </style>
+      {/* ================= RIGHT 40% ================= */}
+      <div
+        style={{
+          width: "30%",
+          background:
+            "linear-gradient(135deg, #850505 0%, #c91a1a 100%)",
+          position: "relative",
+        }}
+      />
+
+      {/* ================= LOGIN CARD ================= */}
+      {/* ================= LOGIN CARD WRAPPER (SPLIT BORDER) ================= */}
+<div
+  style={{
+    position: "absolute",
+    left: "70%",
+    top: "50%",
+    transform: "translate(-50%, -50%)",
+    width: "390px",
+    padding: "8px", // border thickness
+    borderRadius: "8px",
+    background: "linear-gradient(to right, #b30000 50%, #2b2a2a 50%)",
+    zIndex: 15,
+  }}
+>
+  {/* Inner White Card */}
+  <div
+    style={{
+      background: "#ffffff",
+      borderRadius: "16px",
+      padding: "20px 40px",
+      boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+    }}
+  >
+    <div className="text-center mb-4">
+      <img
+        src="/hero-logo.png"
+        alt="Hero"
+        style={{ height: "95px" }}
+      />
+    </div>
+
+    {/* Username */}
+<div className="floating-group">
+<input
+  type="text"
+  name="username"
+  className="floating-input"
+  placeholder="Username"
+  value={formData.username}
+  onChange={handleChange}
+/>
+  <label className="floating-label">
+    <User size={14} style={{ marginRight: "6px" }} />
+    Username
+  </label>
+</div>
+
+    {/* Password */}
+<div className="floating-group position-relative">
+<input
+  type={showPassword ? "text" : "password"}
+  name="password"
+  className="floating-input"
+  placeholder="Password"
+  value={formData.password}
+  onChange={handleChange}
+/>
+  <label className="floating-label">
+    <Lock size={14} style={{ marginRight: "6px" }} />
+    Password
+  </label>
+
+  <button
+    type="button"
+    onClick={() => setShowPassword(!showPassword)}
+    style={{
+      position: "absolute",
+      right: "0px",
+      top: "5px",
+      background: "transparent",
+      border: "none",
+      color: "#777",
+    }}
+  >
+    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+  </button>
+</div>
+
+{/* Remember Me + Forgot Password */}
+<div className="d-flex justify-content-between align-items-center mb-4">
+  <div className="form-check">
+    <input
+      className="form-check-input"
+      type="checkbox"
+      id="rememberMe"
+      style={{ cursor: "pointer" }}
+    />
+    <label
+      className="form-check-label"
+      htmlFor="rememberMe"
+      style={{ fontSize: "14px", color: "#555", cursor: "pointer" }}
+    >
+      Remember Me
+    </label>
+  </div>
+
+ <Link
+    to="/forgot-password"
+    style={{
+      fontSize: "14px",
+      color: "#dc0000",
+      textDecoration: "none",
+      fontWeight: "500",
+    }}
+  >
+    Forgot Password?
+  </Link>
+</div>
+
+{/* Login Button */}
+<button
+  type="button"
+  onClick={handleLogin}
+  disabled={loading}
+  className="btn w-100"
+  style={{
+    backgroundColor: "#dc0000",
+    color: "white",
+    borderRadius: "10px",
+    padding: "12px",
+    fontWeight: "600",
+  }}
+>
+  {loading ? "Logging in..." : "Login"}
+</button>
+
+{/* Signup Sentence */}
+<div className="text-center mt-2">
+  <span style={{ fontSize: "16px", color: "#666" }}>
+    Don’t have an account?{" "}
+  </span>
+<Link
+  to="/signup"
+  style={{
+    fontSize: "14px",
+    color: "#dc0000",
+    fontWeight: "600",
+    textDecoration: "none",
+  }}
+>
+  Sign Up
+</Link>
+</div>
+  </div>
+</div>
+
+      {/* ================= ANIMATION ================= */}
+    <style>
+{`
+  @keyframes pulseGlow {
+    0% { transform: scale(1); opacity: 0.4; }
+    50% { transform: scale(1.1); opacity: 0.6; }
+    100% { transform: scale(1); opacity: 0.4; }
+  }
+
+  .floating-group {
+    position: relative;
+    margin-bottom: 30px;
+  }
+
+  .floating-input {
+    width: 100%;
+    border: none;
+    border-bottom: 2px solid #ccc;
+    outline: none;
+    padding: 8px 0;
+    font-size: 16px;
+    background: transparent;
+    transition: border-color 0.3s ease;
+  }
+
+  .floating-input:focus {
+    border-bottom: 2px solid #dc0000;
+  }
+
+  .floating-label {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    color: #888;
+    font-size: 18px;
+    pointer-events: none;
+    transition: 0.3s ease all;
+  }
+
+  .floating-input:focus + .floating-label,
+  .floating-input:not(:placeholder-shown) + .floating-label {
+    top: -12px;
+    font-size: 14px;
+    color: #dc0000;
+  }
+
+  .floating-input::placeholder {
+    color: transparent;
+  }
+
+`}
+</style>
+
     </div>
   );
 }
