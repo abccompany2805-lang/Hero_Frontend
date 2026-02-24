@@ -3371,17 +3371,13 @@
 
 
 
-
-
-
-
-// Final code without DB insert and rest all is been done
+// // Final code with DB insert and rest all is been done
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import mqtt from "mqtt";
 
-const API_URL = "http://192.168.1.15:5003/api/vin/get-model-by-vin";
-const MQTT_SIGNAL_API = "http://192.168.1.15:5003/api/mqtt-signal/by-stage-no";
+const API_URL = "http://192.168.1.12:5003/api/vin/get-model-by-vin";
+const MQTT_SIGNAL_API = "http://192.168.1.12:5003/api/mqtt-signal/by-stage-no";
 
 const DCToolHMI = () => {
   const [now, setNow] = useState(new Date());
@@ -3487,58 +3483,63 @@ const DCToolHMI = () => {
   const getRootStyle = () => {
     let baseStyle = { ...styles.root };
 
-    if (showResult) {
-      if (finalStatus === "OK") {
-        baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
-      } else {
-        baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
-      }
+    const min = Number(minTorque);
+    const max = Number(maxTorque);
+
+    const isValidLimits = !isNaN(min) && !isNaN(max) && liveTorque > 0;
+
+    const isFail = isValidLimits && (liveTorque < min || liveTorque > max);
+
+    const isPass = isValidLimits && liveTorque >= min && liveTorque <= max;
+
+    if (isFail) {
+      baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+    } else if (isPass) {
+      baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+    } else {
+      baseStyle.animation = "none";
     }
 
     return baseStyle;
   };
 
-
   const insertProcessResult = async (resultValue) => {
-  try {
-    const recipeProcess = apiData.recipeProcess?.[0];
+    try {
+      const recipeProcess = apiData.recipeProcess?.[0];
 
-    const payload = {
-  event_ts: new Date().toISOString(),   // ✅ ADD THIS
-  unit_id: apiData.unitData.unit_id,
-  route_step_id: apiData.routeStep.route_step_id,
-  tool_id: recipeProcess.tool_id,
-  program_no: recipeProcess.program_no,
-  result: resultValue,
-  lsl: recipeProcess.lsl,
-  usl: recipeProcess.usl,
-  value_payload: {
-    torque: liveTorque,
-    angle: liveAngle,
-    stage_no: stageNumber,
-    tool_code: recipeProcess.tool_code,
-    timestamp: new Date().toISOString(),
-  },
-};
+      const payload = {
+        event_ts: new Date().toISOString(), // ✅ ADD THIS
+        unit_id: apiData.unitData.unit_id,
+        route_step_id: apiData.routeStep.route_step_id,
+        tool_id: recipeProcess.tool_id,
+        program_no: recipeProcess.program_no,
+        result: resultValue,
+        lsl: recipeProcess.lsl,
+        usl: recipeProcess.usl,
+        value_payload: {
+          torque: liveTorque,
+          angle: liveAngle,
+          stage_no: stageNumber,
+          tool_code: recipeProcess.tool_code,
+          timestamp: new Date().toISOString(),
+        },
+      };
 
-    await fetch("http://192.168.1.15:5003/api/process-results", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+      await fetch("http://192.168.1.12:5003/api/process-results", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    console.log("Process result inserted");
-
-  } catch (err) {
-    console.error("Insert failed:", err);
-  }
-};
+      console.log("Process result inserted");
+    } catch (err) {
+      console.error("Insert failed:", err);
+    }
+  };
 
   /* ================= SIGNAL DETECTION ================= */
-
-  
 
   /* ================= GENERIC MQTT LISTENER ================= */
 
@@ -3551,7 +3552,7 @@ const DCToolHMI = () => {
       mqttClientRef.current.end(true);
     }
 
-    const client = mqtt.connect("ws://192.168.1.15:9001", {
+    const client = mqtt.connect("ws://192.168.1.12:9001", {
       reconnectPeriod: 3000,
       clean: true,
     });
@@ -3559,14 +3560,14 @@ const DCToolHMI = () => {
     mqttClientRef.current = client;
 
     client.on("connect", () => {
-  console.log("MQTT Connected ✅");
-  setMqttConnected(true);
+      console.log("MQTT Connected ✅");
+      setMqttConnected(true);
 
-  client.subscribe(engineTopic);   // ✅ VIN
-  client.subscribe(torqueTopic);
-  client.subscribe(angleTopic);
-  client.subscribe(prePitchTopic);
-});
+      client.subscribe(engineTopic); // ✅ VIN
+      client.subscribe(torqueTopic);
+      client.subscribe(angleTopic);
+      client.subscribe(prePitchTopic);
+    });
 
     client.on("message", (topic, message) => {
       const payload = message.toString();
@@ -3635,45 +3636,46 @@ const DCToolHMI = () => {
     };
   }, [stageNumber]);
 
-
-  
-
   /* ================= TIGHTENING LISTENER ================= */
 
   /* ================= PASS / FAIL LOGIC ================= */
 
   useEffect(() => {
-  if (
-    minTorque === "-" ||
-    maxTorque === "-" ||
-    liveTorque <= 0 ||
-    !mqttClientRef.current ||
-    resultPublished ||
-    !apiData
-  ) {
-    return;
-  }
+    if (
+      minTorque === "-" ||
+      maxTorque === "-" ||
+      liveTorque <= 0 ||
+      !mqttClientRef.current ||
+      resultPublished ||
+      !apiData
+    ) {
+      return;
+    }
 
-  const pass =
-    liveTorque >= Number(minTorque) &&
-    liveTorque <= Number(maxTorque);
+    const min = Number(minTorque);
+    const max = Number(maxTorque);
 
-  const resultValue = pass ? "OK" : "NOK";
-  const mqttResult = pass ? "1" : "0";
+    if (isNaN(min) || isNaN(max)) return;
 
-  setFinalStatus(resultValue);
-  setShowResult(true);
-  setShowTorqueValue(true);
+    const pass = liveTorque >= min && liveTorque <= max;
 
-  if (prePitch === 0 && !pass) return;
+    const displayStatus = pass ? "PASS" : "FAIL";
+    const dbStatus = pass ? "OK" : "NOK";
+    const mqttResult = pass ? "1" : "0";
 
-  mqttClientRef.current.publish(resultTopic, mqttResult);
+    // ✅ Move this AFTER PrePitch check
+    if (prePitch === 0 && !pass) return;
 
-  insertProcessResult(resultValue);
+    setFinalStatus(displayStatus);
+    setShowResult(true);
+    setShowTorqueValue(true);
 
-  setResultPublished(true);
+    mqttClientRef.current.publish(resultTopic, mqttResult);
+    insertProcessResult(dbStatus);
 
-}, [liveTorque, prePitch]);
+    setResultPublished(true);
+  }, [liveTorque, prePitch, minTorque, maxTorque, apiData]);
+
   /* ================= FETCH MODEL DATA ================= */
 
   const fetchModelData = async (vin_no, stage_no) => {
@@ -3713,38 +3715,49 @@ const DCToolHMI = () => {
     }
   };
 
-
-    /* ================= PASS / FAIL + TORQUE SECTION COMPONENT ================= */
+  /* ================= PASS / FAIL + TORQUE SECTION COMPONENT ================= */
 
   const TorqueResultSection = () => {
+    const min = Number(minTorque);
+    const max = Number(maxTorque);
+
+    const isValidLimits = !isNaN(min) && !isNaN(max) && liveTorque > 0;
+
+    const isFail = isValidLimits && (liveTorque < min || liveTorque > max);
+
+    const isPass = isValidLimits && liveTorque >= min && liveTorque <= max;
+
     return (
       <>
-        {/* ===== PASS / FAIL DISPLAY ===== */}
         <div style={styles.torqueDisplay}>
           <div
             style={{
               fontSize: 80,
               fontWeight: "bold",
-              color: isTorqueOk ? "#00ff00" : "#ff0033",
+              color: isPass ? "#00ff00" : isFail ? "#ff0033" : "#ffffff",
               textAlign: "center",
               width: "100%",
-              textShadow: isTorqueOk
-                ? "0 0 15px #00ff00"
-                : "0 0 15px #ff0033",
-              ...(showResult ? styles.blinkText : {}),
+              textShadow: isPass
+                ? "0 0 20px #00ff00"
+                : isFail
+                  ? "0 0 20px #ff0033"
+                  : "none",
+              animation: isFail
+                ? "fullScreenFlashRed 0.7s infinite"
+                : isPass
+                  ? "fullScreenPulseGreen 1.5s infinite"
+                  : "none",
             }}
           >
-            {showResult && finalStatus}
+            {isPass && "PASS"}
+            {isFail && "FAIL"}
           </div>
         </div>
 
-        {/* ===== TORQUE VALUE DISPLAY ===== */}
         <div style={styles.torqueText}>
-          {showTorqueValue && (
-            <div style={{ fontSize: 60, fontWeight: "bold", marginTop: "10" }}>
-              {liveTorque} Nm
-            </div>
-          )}
+          <div style={{ fontSize: 60, fontWeight: "bold" }}>
+            {liveTorque} Nm
+          </div>
           TORQUE
           <br />
           VALUE
@@ -4243,5 +4256,3 @@ const styles = {
 };
 
 export default DCToolHMI;
-
-
