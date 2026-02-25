@@ -3370,14 +3370,13 @@
 
 
 
-
-// // Final code with DB insert and rest all is been done
+//  Final code with DB insert and rest all is been done
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import mqtt from "mqtt";
 
-const API_URL = "http://192.168.1.12:5003/api/vin/get-model-by-vin";
-const MQTT_SIGNAL_API = "http://192.168.1.12:5003/api/mqtt-signal/by-stage-no";
+const API_URL = "http://192.168.1.5:5003/api/vin/get-model-by-vin";
+const MQTT_SIGNAL_API = "http://192.168.1.5:5003/api/mqtt-signal/by-stage-no";
 
 const DCToolHMI = () => {
   const [now, setNow] = useState(new Date());
@@ -3412,6 +3411,8 @@ const DCToolHMI = () => {
   const [prePitch, setPrePitch] = useState(0);
   const [resultPublished, setResultPublished] = useState(false);
   const [mqttConnected, setMqttConnected] = useState(false);
+  const currentResultIdRef = useRef(null);
+  const lastSentStatusRef = useRef(null);
 
   const [mqttSignals, setMqttSignals] = useState([]);
   const lastVinRef = useRef(null);
@@ -3508,7 +3509,7 @@ const DCToolHMI = () => {
       const recipeProcess = apiData.recipeProcess?.[0];
 
       const payload = {
-        event_ts: new Date().toISOString(), // ✅ ADD THIS
+        event_ts: new Date().toISOString(),
         unit_id: apiData.unitData.unit_id,
         route_step_id: apiData.routeStep.route_step_id,
         tool_id: recipeProcess.tool_id,
@@ -3520,29 +3521,82 @@ const DCToolHMI = () => {
           torque: liveTorque,
           angle: liveAngle,
           stage_no: stageNumber,
-          tool_code: recipeProcess.tool_code,
           timestamp: new Date().toISOString(),
         },
       };
 
-      await fetch("http://192.168.1.12:5003/api/process-results", {
+      const res = await fetch("http://192.168.1.5:5003/api/process-results", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      console.log("Process result inserted");
+      const json = await res.json();
+      currentResultIdRef.current = json.result_id;
     } catch (err) {
       console.error("Insert failed:", err);
     }
   };
 
-  /* ================= SIGNAL DETECTION ================= */
+  // const appendProcessResult = async () => {
+  //   try {
+  //     if (!currentResultIdRef.current) return;
 
-  /* ================= GENERIC MQTT LISTENER ================= */
+  //     const payload = {
+  //       value_payload: {
+  //         torque: liveTorque,
+  //         angle: liveAngle,
+  //         stage_no: stageNumber,
+  //         timestamp: new Date().toISOString(),
+  //       },
+  //     };
 
+  //     await fetch(
+  //       `http://192.168.1.5:5003/api/process-results/${currentResultIdRef.current}`,
+  //       {
+  //         method: "PUT",
+  //         headers: { "Content-Type": "application/json" },
+  //         body: JSON.stringify(payload),
+  //       }
+  //     );
+
+  //   } catch (err) {
+  //     console.error("Append failed:", err);
+  //   }
+  // };
+
+  const appendProcessResult = async (pass) => {
+    try {
+      if (!currentResultIdRef.current) {
+        console.log("❌ No result_id stored.");
+        return;
+      }
+
+      const payload = {
+        attempt_type: pass ? "OK" : "NOK",
+        value_payload: {
+          torque: liveTorque,
+          angle: liveAngle,
+          stage_no: stageNumber,
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      const res = await fetch(
+        `http://192.168.1.5:5003/api/process-results/${currentResultIdRef.current}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const json = await res.json();
+      console.log("✅ Append Response:", json);
+    } catch (err) {
+      console.error("❌ Append failed:", err);
+    }
+  };
   /* ================= VIN LISTENER ================= */
 
   useEffect(() => {
@@ -3552,7 +3606,7 @@ const DCToolHMI = () => {
       mqttClientRef.current.end(true);
     }
 
-    const client = mqtt.connect("ws://192.168.1.12:9001", {
+    const client = mqtt.connect("ws://192.168.1.5:9001", {
       reconnectPeriod: 3000,
       clean: true,
     });
@@ -3640,42 +3694,91 @@ const DCToolHMI = () => {
 
   /* ================= PASS / FAIL LOGIC ================= */
 
+  //   useEffect(() => {
+  //   if (
+  //     minTorque === "-" ||
+  //     maxTorque === "-" ||
+  //     liveTorque <= 0 ||
+  //     !mqttClientRef.current ||
+  //     !apiData
+  //   ) {
+  //     return;
+  //   }
+
+  //   const min = Number(minTorque);
+  //   const max = Number(maxTorque);
+
+  //   if (isNaN(min) || isNaN(max)) return;
+
+  //   const pass = liveTorque >= min && liveTorque <= max;
+
+  //   const displayStatus = pass ? "PASS" : "FAIL";
+  //   const dbStatus = pass ? "OK" : "NOK";
+  //   const mqttResult = pass ? "1" : "0";
+
+  //   setFinalStatus(displayStatus);
+  //   setShowResult(true);
+  //   setShowTorqueValue(true);
+
+  //   /* ================== NEW LOGIC ================== */
+
+  //   // 🔹 CASE 1 → PASS → send immediately
+  //   if (pass) {
+  //     mqttClientRef.current.publish(resultTopic, "1");
+  //     insertProcessResult("OK");
+  //     setResultPublished(true);
+  //     return;
+  //   }
+
+  //   // 🔹 CASE 2 → FAIL → wait for PrePitch = 1
+  //   if (!pass && prePitch === 1) {
+  //     mqttClientRef.current.publish(resultTopic, "0");
+  //     insertProcessResult("NOK");
+  //     setResultPublished(true);
+  //     return;
+  //   }
+
+  // }, [liveTorque, prePitch, minTorque, maxTorque, apiData]);
+
   useEffect(() => {
     if (
       minTorque === "-" ||
       maxTorque === "-" ||
       liveTorque <= 0 ||
       !mqttClientRef.current ||
-      resultPublished ||
       !apiData
-    ) {
+    )
       return;
-    }
 
     const min = Number(minTorque);
     const max = Number(maxTorque);
-
     if (isNaN(min) || isNaN(max)) return;
 
     const pass = liveTorque >= min && liveTorque <= max;
 
-    const displayStatus = pass ? "PASS" : "FAIL";
-    const dbStatus = pass ? "OK" : "NOK";
-    const mqttResult = pass ? "1" : "0";
+    /* ===== PASS FIRST TIME ===== */
+    if (pass && lastSentStatusRef.current === null) {
+      mqttClientRef.current.publish(resultTopic, "1");
+      insertProcessResult("OK");
+      lastSentStatusRef.current = "OK";
+      return;
+    }
 
-    // ✅ Move this AFTER PrePitch check
-    if (prePitch === 0 && !pass) return;
+    /* ===== FAIL → WAIT FOR PREPITCH ===== */
+    if (!pass && prePitch === 1 && lastSentStatusRef.current !== "NOK") {
+      mqttClientRef.current.publish(resultTopic, "0");
+      insertProcessResult("NOK");
+      lastSentStatusRef.current = "NOK";
+      return;
+    }
 
-    setFinalStatus(displayStatus);
-    setShowResult(true);
-    setShowTorqueValue(true);
-
-    mqttClientRef.current.publish(resultTopic, mqttResult);
-    insertProcessResult(dbStatus);
-
-    setResultPublished(true);
-  }, [liveTorque, prePitch, minTorque, maxTorque, apiData]);
-
+    /* ===== AFTER NOK → NOW PASS AGAIN ===== */
+    if (pass && lastSentStatusRef.current === "NOK") {
+      mqttClientRef.current.publish(resultTopic, "1");
+      appendProcessResult(); // ✅ Only append
+      return;
+    }
+  }, [liveTorque, prePitch]);
   /* ================= FETCH MODEL DATA ================= */
 
   const fetchModelData = async (vin_no, stage_no) => {
