@@ -920,6 +920,8 @@
 
 
 
+
+
 // code with multiple bolt tightening
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
@@ -1035,23 +1037,22 @@ const DCToolHMI = () => {
   };
 
   const getRootStyle = () => {
-  let baseStyle = { ...styles.root };
+    let baseStyle = { ...styles.root };
 
-  if (finalStatus === "NOK") {
-    baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
-  } else if (finalStatus === "OK") {
-    baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
-  } else {
-    baseStyle.animation = "none";
-  }
+    if (finalStatus === "NOK") {
+      baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+    } else if (finalStatus === "OK") {
+      baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+    } else {
+      baseStyle.animation = "none";
+    }
 
-  return baseStyle;
-};
+    return baseStyle;
+  };
 
   const insertProcessResult = async (resultValue) => {
     try {
       const recipeProcess = apiData.recipeProcess?.[0];
-      
 
       const payload = {
         event_ts: new Date().toISOString(),
@@ -1093,10 +1094,10 @@ const DCToolHMI = () => {
       const payload = {
         attempt_type: pass ? "OK" : "NOK",
         value_payload: {
-  bolts: boltResults,
-  stage_no: stageNumber,
-  timestamp: new Date().toISOString(),
-},
+          bolts: boltResults,
+          stage_no: stageNumber,
+          timestamp: new Date().toISOString(),
+        },
       };
 
       const res = await fetch(
@@ -1158,42 +1159,41 @@ const DCToolHMI = () => {
       }
 
       for (let i = 1; i <= tighteningCount; i++) {
+        if (topic === `ST${stageNumber}_Torque${i}`) {
+          const value = Number(payload);
 
-  if (topic === `ST${stageNumber}_Torque${i}`) {
-    const value = Number(payload);
+          if (!isNaN(value)) {
+            setBoltResults((prev) => {
+              const updated = { ...prev };
+              const min = Number(minTorque);
+              const max = Number(maxTorque);
 
-    if (!isNaN(value)) {
-      setBoltResults(prev => {
-        const updated = { ...prev };
-        const min = Number(minTorque);
-        const max = Number(maxTorque);
+              updated[i] = {
+                ...updated[i],
+                torque: value,
+                status: value >= min && value <= max ? "OK" : "NOK",
+              };
 
-        updated[i] = {
-          ...updated[i],
-          torque: value,
-          status: value >= min && value <= max ? "OK" : "NOK"
-        };
+              return updated;
+            });
+          }
+        }
 
-        return updated;
-      });
-    }
-  }
+        if (topic === `ST${stageNumber}_Angle${i}`) {
+          const value = Number(payload);
 
-  if (topic === `ST${stageNumber}_Angle${i}`) {
-    const value = Number(payload);
-
-    if (!isNaN(value)) {
-      setBoltResults(prev => {
-        const updated = { ...prev };
-        updated[i] = {
-          ...updated[i],
-          angle: value
-        };
-        return updated;
-      });
-    }
-  }
-}
+          if (!isNaN(value)) {
+            setBoltResults((prev) => {
+              const updated = { ...prev };
+              updated[i] = {
+                ...updated[i],
+                angle: value,
+              };
+              return updated;
+            });
+          }
+        }
+      }
 
       /* ===== Angle ===== */
       if (topic === angleTopic) {
@@ -1244,33 +1244,32 @@ const DCToolHMI = () => {
   /* ================= PASS / FAIL LOGIC ================= */
 
   useEffect(() => {
-  if (!boltResults || Object.keys(boltResults).length === 0) return;
+    if (!boltResults || Object.keys(boltResults).length === 0) return;
 
-  const statuses = Object.values(boltResults).map(b => b.status);
+    const statuses = Object.values(boltResults).map((b) => b.status);
 
-  if (statuses.includes(null)) return;
+    if (statuses.includes(null)) return;
 
-  const allOk = statuses.every(s => s === "OK");
-  const anyNok = statuses.includes("NOK");
+    const allOk = statuses.every((s) => s === "OK");
+    const anyNok = statuses.includes("NOK");
 
-  if (anyNok) {
-    if (prePitch === 1 && lastSentStatusRef.current !== "NOK") {
-      mqttClientRef.current?.publish(resultTopic, "0");
-      insertProcessResult("NOK");
-      setFinalStatus("NOK");
-      lastSentStatusRef.current = "NOK";
+    if (anyNok) {
+      if (prePitch === 1 && lastSentStatusRef.current !== "NOK") {
+        mqttClientRef.current?.publish(resultTopic, "0");
+        insertProcessResult("NOK");
+        setFinalStatus("NOK");
+        lastSentStatusRef.current = "NOK";
+      }
+      return;
     }
-    return;
-  }
 
-  if (allOk && lastSentStatusRef.current !== "OK") {
-    mqttClientRef.current?.publish(resultTopic, "1");
-    insertProcessResult("OK");
-    setFinalStatus("OK");
-    lastSentStatusRef.current = "OK";
-  }
-
-}, [boltResults, prePitch]);
+    if (allOk && lastSentStatusRef.current !== "OK") {
+      mqttClientRef.current?.publish(resultTopic, "1");
+      insertProcessResult("OK");
+      setFinalStatus("OK");
+      lastSentStatusRef.current = "OK";
+    }
+  }, [boltResults, prePitch]);
   /* ================= FETCH MODEL DATA ================= */
 
   const fetchModelData = async (vin_no, stage_no) => {
@@ -1298,14 +1297,14 @@ const DCToolHMI = () => {
 
       const recipeProcess = json.recipeProcess?.[0];
       const count = recipeProcess?.tightening_cnt ?? 1;
-setTighteningCount(count);
+      setTighteningCount(count);
 
-const init = {};
-for (let i = 1; i <= count; i++) {
-  init[i] = { torque: 0, angle: 0, status: null };
-}
-setBoltResults(init);
-setCurrentBolt(1);
+      const init = {};
+      for (let i = 1; i <= count; i++) {
+        init[i] = { torque: 0, angle: 0, status: null };
+      }
+      setBoltResults(init);
+      setCurrentBolt(1);
 
       setModelName(json.model?.model_name ?? "-");
       setModelSku(json.model?.model_code ?? "-");
@@ -1327,24 +1326,26 @@ setCurrentBolt(1);
         <table style={styles.boltTable}>
           <thead>
             <tr>
-              <th>Bolt</th>
-              <th>Min</th>
-              <th>Max</th>
-              <th>Angle</th>
-              <th>Torque</th>
-              <th>Result</th>
+              <th style={styles.boltTableTh}>Bolt</th>
+              <th style={styles.boltTableTh}>Min</th>
+              <th style={styles.boltTableTh}>Max</th>
+              <th style={styles.boltTableTh}>Angle</th>
+              <th style={styles.boltTableTh}>Torque</th>
+              <th style={styles.boltTableTh}>Result</th>
             </tr>
           </thead>
+
           <tbody>
             {Object.entries(boltResults).map(([index, bolt]) => (
               <tr key={index}>
-                <td>{`Bolt ${index}`}</td>
-                <td>{minTorque}</td>
-                <td>{maxTorque}</td>
-                <td>{bolt.angle}</td>
-                <td>{bolt.torque}</td>
+                <td style={styles.boltTableTd}>{`Bolt ${index}`}</td>
+                <td style={styles.boltTableTd}>{minTorque}</td>
+                <td style={styles.boltTableTd}>{maxTorque}</td>
+                <td style={styles.boltTableTd}>{bolt.angle ?? "-"}</td>
+                <td style={styles.boltTableTd}>{bolt.torque ?? "-"}</td>
                 <td
                   style={{
+                    ...styles.boltTableTd,
                     color:
                       bolt.status === "OK"
                         ? "#00ff00"
@@ -1364,14 +1365,17 @@ setCurrentBolt(1);
         {finalStatus && (
           <div
             style={{
-              fontSize: 40,
-              marginTop: 20,
+              fontSize: 50,
+              marginTop: 30,
               textAlign: "center",
+              fontWeight: "900",
+              letterSpacing: 3,
               color: finalStatus === "OK" ? "#00ff00" : "#ff0033",
-              fontWeight: "bold",
+              textShadow:
+                finalStatus === "OK" ? "0 0 20px #00ff00" : "0 0 20px #ff0033",
             }}
           >
-            FINAL STATUS: {finalStatus}
+            FINAL STATUS: {finalStatus === "OK" ? "PASS" : "FAIL"}
           </div>
         )}
       </div>
@@ -1533,12 +1537,12 @@ setCurrentBolt(1);
               </div>
             </div>
 
-            <div style={styles.angleRow}>
+            {/* <div style={styles.angleRow}>
               ANGLE -{" "}
               {showTorqueValue && (
                 <span style={styles.yellow}>{liveAngle}°</span>
               )}
-            </div>
+            </div> */}
           </div>
 
           <TorqueResultSection />
@@ -1868,24 +1872,38 @@ const styles = {
 
   boltTableContainer: {
     marginTop: 20,
+    backgroundColor: "#0b0f1a",
+    border: "3px solid #00c3ff",
+    borderRadius: 12,
+    padding: 20,
+    boxShadow: "0 0 20px rgba(0,195,255,0.4)",
   },
 
   boltTable: {
     width: "100%",
     borderCollapse: "collapse",
     textAlign: "center",
-    fontSize: 22,
+    fontSize: 20,
+    color: "#ffffff",
   },
 
   boltTableTh: {
-    border: "2px solid #00c3ff",
-    padding: 10,
+    border: "1px solid #00c3ff",
+    padding: "12px 8px",
+    fontWeight: "bold",
+    fontSize: 22,
+    backgroundColor: "#111827",
+    color: "#00c3ff",
   },
 
   boltTableTd: {
-    border: "1px solid #444",
-    padding: 8,
+    border: "1px solid #1f2937",
+    padding: "10px 8px",
+    fontSize: 18,
   },
 };
 
 export default DCToolHMI;
+
+
+
