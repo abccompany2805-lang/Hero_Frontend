@@ -1909,18 +1909,13 @@
 
 
 
-
-
-
-
-
-// code with multiple bolt tightening and tightening logic and conditions
+// code with multiple bolt tightening and tightening logic
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import mqtt from "mqtt";
 
-const API_URL = "http://192.168.1.8:5003/api/vin/get-model-by-vin";
-const MQTT_SIGNAL_API = "http://192.168.1.8:5003/api/mqtt-signal/by-stage-no";
+const API_URL = "http://192.168.1.7:5003/api/vin/get-model-by-vin";
+const MQTT_SIGNAL_API = "http://192.168.1.7:5003/api/mqtt-signal/by-stage-no";
 
 const DCToolHMI = () => {
   const [now, setNow] = useState(new Date());
@@ -1967,6 +1962,7 @@ const DCToolHMI = () => {
   const [boltResults, setBoltResults] = useState({});
   const [currentBolt, setCurrentBolt] = useState(1);
   const [vinLoaded, setVinLoaded] = useState(false);
+  const [passLocked, setPassLocked] = useState(false);
 
   /* ================= OK / NOT OK LOGIC ================= */
   const isTorqueOk =
@@ -2013,7 +2009,7 @@ const DCToolHMI = () => {
 
       @keyframes fullScreenPulseGreen {
         0% { background-color: #000; }
-        50% { background-color: #002200; }
+        50% { background-color: #084b08; }
         100% { background-color: #000; }
       }
     `;
@@ -2029,6 +2025,7 @@ const DCToolHMI = () => {
     setLiveTorque(0);
     setLiveAngle(0);
     setPrePitch(0);
+    setPassLocked(false);
 
     // 🔴 Clear VIN state
     setVinLoaded(false);
@@ -2094,7 +2091,7 @@ const DCToolHMI = () => {
         },
       };
 
-      await fetch("http://192.168.1.8:5003/api/process-results", {
+      await fetch("http://192.168.1.7:5003/api/process-results", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -2112,7 +2109,7 @@ const DCToolHMI = () => {
       mqttClientRef.current.end(true);
     }
 
-    const client = mqtt.connect("ws://192.168.1.8:9001", {
+    const client = mqtt.connect("ws://192.168.1.7:9001", {
       reconnectPeriod: 3000,
       clean: true,
     });
@@ -2152,7 +2149,8 @@ const DCToolHMI = () => {
 
       for (let i = 1; i <= tighteningCount; i++) {
         if (topic === `ST${stageNumber}_Torque${i}`) {
-          if (!vinLoaded || vinError) return; // 🚫 Ignore torque if VIN not loaded
+          // 🔒 Hard Lock
+          if (!vinLoaded || passLocked) return;
 
           const value = Number(payload);
 
@@ -2174,7 +2172,7 @@ const DCToolHMI = () => {
         }
 
         if (topic === `ST${stageNumber}_Angle${i}`) {
-          if (!vinLoaded) return; // 🚫 Ignore angle if VIN not loaded
+          if (!vinLoaded || passLocked) return;
 
           const value = Number(payload);
 
@@ -2193,6 +2191,8 @@ const DCToolHMI = () => {
 
       /* ===== Angle ===== */
       if (topic === angleTopic) {
+        if (!vinLoaded || passLocked) return;
+
         const value = Number(payload);
         if (!isNaN(value)) {
           setLiveAngle(value);
@@ -2233,7 +2233,7 @@ const DCToolHMI = () => {
     return () => {
       client.end();
     };
-  }, [stageNumber, tighteningCount]);
+  }, [stageNumber, tighteningCount, passLocked, vinLoaded]);
 
   /* ================= TIGHTENING LISTENER ================= */
 
@@ -2273,6 +2273,9 @@ const DCToolHMI = () => {
 
       insertProcessResult(final);
       setFinalStatus(final);
+      if (final === "OK") {
+        setPassLocked(true); // 🔒 Lock after PASS
+      }
 
       lastSentStatusRef.current = final;
     }
@@ -2379,23 +2382,6 @@ const DCToolHMI = () => {
             ))}
           </tbody>
         </table>
-
-        {finalStatus && (
-          <div
-            style={{
-              fontSize: 50,
-              marginTop: 30,
-              textAlign: "center",
-              fontWeight: "900",
-              letterSpacing: 3,
-              color: finalStatus === "OK" ? "#00ff00" : "#ff0033",
-              textShadow:
-                finalStatus === "OK" ? "0 0 20px #00ff00" : "0 0 20px #ff0033",
-            }}
-          >
-            FINAL STATUS: {finalStatus === "OK" ? "PASS" : "FAIL"}
-          </div>
-        )}
       </div>
     );
   };
@@ -2456,6 +2442,23 @@ const DCToolHMI = () => {
           </span>
         </div>
 
+        {finalStatus && (
+          <div
+            style={{
+              fontSize: 50,
+
+              textAlign: "center",
+              fontWeight: "900",
+              letterSpacing: 3,
+              color: finalStatus === "OK" ? "#00ff00" : "#ff0033",
+              textShadow:
+                finalStatus === "OK" ? "0 0 20px #00ff00" : "0 0 20px #ff0033",
+            }}
+          >
+            FINAL STATUS: {finalStatus === "OK" ? "PASS" : "FAIL"}
+          </div>
+        )}
+
         <div style={styles.lineStatusRight}>
           <span
             style={{
@@ -2464,15 +2467,6 @@ const DCToolHMI = () => {
             }}
           >
             AUTO
-          </span>
-          <span style={styles.lineSeparator}>|</span>
-          <span
-            style={{
-              ...styles.lineManual,
-              opacity: operationMode === "MANUAL" ? 1 : 0.3,
-            }}
-          >
-            MANUAL
           </span>
         </div>
       </div>
@@ -2869,7 +2863,7 @@ const styles = {
     fontSize: 40,
   },
 
-  skuText: { color: "#fff" },
+  skuText: { color: "#fff", fontWeight: "bold" },
   yellow: { color: "#ffd000", fontWeight: "bold" },
 
   angleRow: {
@@ -2950,4 +2944,6 @@ const styles = {
 };
 
 export default DCToolHMI;
+
+
 
