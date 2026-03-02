@@ -1,11 +1,12 @@
+// code with multiple bolt tightening and tightening logic
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import mqtt from "mqtt";
 
-const API_URL = "http://192.168.1.15:5003/api/vin/get-model-by-vin";
-const MQTT_SIGNAL_API = "http://192.168.1.15:5003/api/mqtt-signal/by-stage-no";
+const API_URL = "http://192.168.1.7:5003/api/vin/get-model-by-vin";
+const MQTT_SIGNAL_API = "http://192.168.1.7:5003/api/mqtt-signal/by-stage-no";
 
-const LeakTool = () => {
+const LeakTest = () => {
   const [now, setNow] = useState(new Date());
 
   /* ================= STAGE ================= */
@@ -29,7 +30,7 @@ const LeakTool = () => {
   const [minLeak, setMinLeak] = useState("-");
   const [maxLeak, setMaxLeak] = useState("-");
   const [showResult, setShowResult] = useState(false);
-  const [showTorqueValue, setShowTorqueValue] = useState(false);
+  const [showLeakValue, setShowLeakValue] = useState(false);
   const [liveLeak, setLiveLeak] = useState(0);
   const [liveAngle, setLiveAngle] = useState(0);
   const [finalStatus, setFinalStatus] = useState(null);
@@ -38,14 +39,22 @@ const LeakTool = () => {
   const [prePitch, setPrePitch] = useState(0);
   const [resultPublished, setResultPublished] = useState(false);
   const [mqttConnected, setMqttConnected] = useState(false);
+  const currentResultIdRef = useRef(null);
+  const lastSentStatusRef = useRef(null);
+  const [vinError, setVinError] = useState(null);
 
   const [mqttSignals, setMqttSignals] = useState([]);
   const lastVinRef = useRef(null);
   const vinTopicRef = useRef(null);
   const [apiData, setApiData] = useState(null);
+  const [tighteningCount, setTighteningCount] = useState(1);
+  const [boltResults, setBoltResults] = useState({});
+  const [currentBolt, setCurrentBolt] = useState(1);
+  const [vinLoaded, setVinLoaded] = useState(false);
+  const [passLocked, setPassLocked] = useState(false);
 
   /* ================= OK / NOT OK LOGIC ================= */
-  const isTorqueOk =
+  const isLeakOk =
     minLeak !== "-" &&
     maxLeak !== "-" &&
     liveLeak >= Number(minLeak) &&
@@ -83,23 +92,54 @@ const LeakTool = () => {
     style.innerHTML = `
       @keyframes fullScreenFlashRed {
         0% { background-color: #000; }
-        50% { background-color: #330000; }
+        50% { background-color: #980c0c; }
         100% { background-color: #000; }
       }
 
       @keyframes fullScreenPulseGreen {
         0% { background-color: #000; }
-        50% { background-color: #002200; }
+        50% { background-color: #084b08; }
         100% { background-color: #000; }
       }
     `;
     document.head.appendChild(style);
   }, []);
 
+  const resetCycleState = () => {
+    // 🔴 Clear tightening data
+    setFinalStatus(null);
+    setBoltResults({});
+    setTighteningCount(1);
+    setCurrentBolt(1);
+    setLiveLeak(0);
+    setLiveAngle(0);
+    setPrePitch(0);
+    setPassLocked(false);
+
+    // 🔴 Clear VIN state
+    setVinLoaded(false);
+    setVinError(null);
+
+    // 🔴 Clear Model + SKU + Stage info
+    setModelName("-");
+    setModelSku("-");
+    setStageName("-");
+    setMinLeak("-");
+    setMaxLeak("-");
+
+    // 🔴 Clear backend data
+    setApiData(null);
+
+    // 🔴 Clear publish tracking
+    lastSentStatusRef.current = null;
+  };
+
   const handleVinKeyDown = (e) => {
     if (e.key === "Enter") {
       const trimmed = vinInput.trim();
       if (!trimmed) return;
+
+      resetCycleState();
 
       lastVinRef.current = trimmed; // prevent duplicate MQTT call
       fetchModelData(trimmed, stageNumber);
@@ -109,61 +149,46 @@ const LeakTool = () => {
   const getRootStyle = () => {
     let baseStyle = { ...styles.root };
 
-    if (showResult) {
-      if (finalStatus === "PASS") {
-        baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
-      } else {
-        baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
-      }
+    if (finalStatus === "NOK") {
+      baseStyle.animation = "fullScreenFlashRed 0.7s infinite";
+    } else if (finalStatus === "OK") {
+      baseStyle.animation = "fullScreenPulseGreen 1.5s infinite";
+    } else {
+      baseStyle.animation = "none";
     }
 
     return baseStyle;
   };
 
-
   const insertProcessResult = async (resultValue) => {
-  try {
-    const recipeProcess = apiData.recipeProcess?.[0];
+    try {
+      const recipeProcess = apiData.recipeProcess?.[0];
 
-    const payload = {
-  event_ts: new Date().toISOString(),   // ✅ ADD THIS
-  unit_id: apiData.unitData.unit_id,
-  route_step_id: apiData.routeStep.route_step_id,
-  tool_id: recipeProcess.tool_id,
-  program_no: recipeProcess.program_no,
-  result: resultValue,
-  lsl: recipeProcess.lsl,
-  usl: recipeProcess.usl,
-  value_payload: {
-    leak: liveLeak,
-    angle: liveAngle,
-    stage_no: stageNumber,
-    tool_code: recipeProcess.tool_code,
-    timestamp: new Date().toISOString(),
-  },
-};
+      const payload = {
+        event_ts: new Date().toISOString(),
+        unit_id: apiData.unitData.unit_id,
+        route_step_id: apiData.routeStep.route_step_id,
+        tool_id: recipeProcess.tool_id,
+        program_no: recipeProcess.program_no,
+        result: resultValue,
+        lsl: recipeProcess.lsl,
+        usl: recipeProcess.usl,
+        value_payload: {
+          bolts: boltResults, // ✅ all bolts stored here
+          stage_no: stageNumber,
+          timestamp: new Date().toISOString(),
+        },
+      };
 
-    await fetch("http://192.168.1.15:5003/api/process-results", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    console.log("Process result inserted");
-
-  } catch (err) {
-    console.error("Insert failed:", err);
-  }
-};
-
-  /* ================= SIGNAL DETECTION ================= */
-
-  
-
-  /* ================= GENERIC MQTT LISTENER ================= */
-
+      await fetch("http://192.168.1.7:5003/api/process-results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.error("Insert failed:", err);
+    }
+  };
   /* ================= VIN LISTENER ================= */
 
   useEffect(() => {
@@ -173,7 +198,7 @@ const LeakTool = () => {
       mqttClientRef.current.end(true);
     }
 
-    const client = mqtt.connect("ws://192.168.1.15:9001", {
+    const client = mqtt.connect("ws://192.168.1.7:9001", {
       reconnectPeriod: 3000,
       clean: true,
     });
@@ -181,14 +206,16 @@ const LeakTool = () => {
     mqttClientRef.current = client;
 
     client.on("connect", () => {
-  console.log("MQTT Connected ✅");
-  setMqttConnected(true);
+      console.log("MQTT Connected ✅");
+      setMqttConnected(true);
 
-  client.subscribe(engineTopic);   // ✅ VIN
-  client.subscribe(leakTopic);
-  
-  client.subscribe(prePitchTopic);
-});
+      client.subscribe(engineTopic); // ✅ VIN
+      for (let i = 1; i <= tighteningCount; i++) {
+        client.subscribe(`ST${stageNumber}_Leak${i}`);
+        client.subscribe(`ST${stageNumber}_Angle${i}`);
+      }
+      client.subscribe(prePitchTopic);
+    });
 
     client.on("message", (topic, message) => {
       const payload = message.toString();
@@ -200,21 +227,61 @@ const LeakTool = () => {
         if (!vin) return;
         if (lastVinRef.current === vin) return;
 
-        lastVinRef.current = vin;
-        setVinInput(vin);
-        fetchModelData(vin, stageNumber);
+        if (lastVinRef.current !== vin) {
+          resetCycleState(); // 🔥 clear everything
+
+          lastVinRef.current = vin;
+          setVinInput(vin);
+          fetchModelData(vin, stageNumber);
+        }
       }
 
-      /* ===== Leak ===== */
-      if (topic === leakTopic) {
-        const value = Number(payload);
-        if (!isNaN(value)) {
-          setLiveLeak(value);
+      for (let i = 1; i <= tighteningCount; i++) {
+        if (topic === `ST${stageNumber}_Leak${i}`) {
+          // 🔒 Hard Lock
+          if (!vinLoaded || passLocked) return;
+
+          const value = Number(payload);
+
+          if (!isNaN(value)) {
+            setBoltResults((prev) => {
+              const updated = { ...prev };
+              const min = Number(minLeak);
+              const max = Number(maxLeak);
+
+              updated[i] = {
+                ...updated[i],
+                leak: value,
+                status: value >= min && value <= max ? "OK" : "NOK",
+              };
+
+              return updated;
+            });
+          }
+        }
+
+        if (topic === `ST${stageNumber}_Angle${i}`) {
+          if (!vinLoaded || passLocked) return;
+
+          const value = Number(payload);
+
+          if (!isNaN(value)) {
+            setBoltResults((prev) => {
+              const updated = { ...prev };
+              updated[i] = {
+                ...updated[i],
+                angle: value,
+              };
+              return updated;
+            });
+          }
         }
       }
 
       /* ===== Angle ===== */
       if (topic === angleTopic) {
+        if (!vinLoaded || passLocked) return;
+
         const value = Number(payload);
         if (!isNaN(value)) {
           setLiveAngle(value);
@@ -255,56 +322,61 @@ const LeakTool = () => {
     return () => {
       client.end();
     };
-  }, [stageNumber]);
-
-
-  
+  }, [stageNumber, tighteningCount, passLocked, vinLoaded]);
 
   /* ================= TIGHTENING LISTENER ================= */
 
   /* ================= PASS / FAIL LOGIC ================= */
 
   useEffect(() => {
-  if (
-    minLeak === "-" ||
-    maxLeak === "-" ||
-    liveLeak <= 0 ||
-    !mqttClientRef.current ||
-    resultPublished ||
-    !apiData
-  ) {
-    return;
-  }
+    if (!vinLoaded) return;
 
-  const pass =
-    liveLeak >= Number(minLeak) &&
-    liveLeak <= Number(maxLeak);
+    const boltArray = [];
 
-  const resultValue = pass ? "OK" : "NOK";
-  const mqttResult = pass ? "1" : "0";
+    for (let i = 1; i <= tighteningCount; i++) {
+      const bolt = boltResults[i];
+      if (!bolt || bolt.status === null) return;
+      boltArray.push(bolt.status);
+    }
 
-  setFinalStatus(resultValue);
-  setShowResult(true);
-  setShowTorqueValue(true);
+    const allOk = boltArray.every((s) => s === "OK");
+    const anyNok = boltArray.includes("NOK");
 
-  if (prePitch === 0 && !pass) return;
+    let final = null;
 
-  mqttClientRef.current.publish(resultTopic, mqttResult);
+    // 🔹 Immediate PASS publish
+    if (allOk) {
+      final = "OK";
+    }
 
-  insertProcessResult(resultValue);
+    // 🔹 FAIL only when PrePitch = 1
+    else if (anyNok && prePitch === 1) {
+      final = "NOK";
+    }
 
-  setResultPublished(true);
+    if (!final) return;
 
-}, [liveLeak, prePitch]);
+    // 🚀 Prevent duplicate publish
+    if (final !== lastSentStatusRef.current) {
+      mqttClientRef.current?.publish(resultTopic, final === "OK" ? "1" : "0");
+
+      insertProcessResult(final);
+      setFinalStatus(final);
+      if (final === "OK") {
+        setPassLocked(true); // 🔒 Lock after PASS
+      }
+
+      lastSentStatusRef.current = final;
+    }
+  }, [boltResults, prePitch]);
   /* ================= FETCH MODEL DATA ================= */
 
   const fetchModelData = async (vin_no, stage_no) => {
-    setFinalStatus(null);
-    setLiveLeak(0);
-    setLiveAngle(0);
+    setVinLoaded(false);
+
     setShowResult(false);
-    setShowTorqueValue(false);
-    setPrePitch(0);
+    setShowLeakValue(false);
+
     setResultPublished(false);
 
     try {
@@ -318,10 +390,31 @@ const LeakTool = () => {
       });
 
       const json = await res.json();
+
+      if (!json || !json.model) {
+        setVinError("WRONG VIN NO");
+        setVinLoaded(false);
+        setBoltResults({});
+        setFinalStatus(null);
+        return;
+      }
+
+      setVinError(null); // Clear error if valid
       setApiData(json);
-      if (!json) return;
+
+      /* ✅ ADD THIS LINE */
+      setVinLoaded(true);
 
       const recipeProcess = json.recipeProcess?.[0];
+      const count = recipeProcess?.tightening_cnt ?? 1;
+      setTighteningCount(count);
+
+      const init = {};
+      for (let i = 1; i <= count; i++) {
+        init[i] = { leak: 0, angle: 0, status: null };
+      }
+      setBoltResults(init);
+      setCurrentBolt(1);
 
       setModelName(json.model?.model_name ?? "-");
       setModelSku(json.model?.model_code ?? "-");
@@ -335,43 +428,50 @@ const LeakTool = () => {
     }
   };
 
+  /* ================= PASS / FAIL + LEAK SECTION COMPONENT ================= */
 
-    /* ================= PASS / FAIL + TORQUE SECTION COMPONENT ================= */
-
-  const TorqueResultSection = () => {
+  const LeakResultSection = () => {
     return (
-      <>
-        {/* ===== PASS / FAIL DISPLAY ===== */}
-        <div style={styles.torqueDisplay}>
-          <div
-            style={{
-              fontSize: 80,
-              fontWeight: "bold",
-              color: isTorqueOk ? "#00ff00" : "#ff0033",
-              textAlign: "center",
-              width: "100%",
-              textShadow: isTorqueOk
-                ? "0 0 15px #00ff00"
-                : "0 0 15px #ff0033",
-              ...(showResult ? styles.blinkText : {}),
-            }}
-          >
-            {showResult && finalStatus}
-          </div>
-        </div>
+      <div style={styles.boltTableContainer}>
+        <table style={styles.boltTable}>
+          <thead>
+            <tr>
+              <th style={styles.boltTableTh}>Bolt</th>
+              <th style={styles.boltTableTh}>Min</th>
+              <th style={styles.boltTableTh}>Max</th>
+              <th style={styles.boltTableTh}>Angle</th>
+              <th style={styles.boltTableTh}>Leak</th>
+              <th style={styles.boltTableTh}>Result</th>
+            </tr>
+          </thead>
 
-        {/* ===== TORQUE VALUE DISPLAY ===== */}
-        <div style={styles.torqueText}>
-          {showTorqueValue && (
-            <div style={{ fontSize: 60, fontWeight: "bold", marginTop: "10" }}>
-              {liveLeak} Nm
-            </div>
-          )}
-          LEAK
-          <br />
-          VALUE
-        </div>
-      </>
+          <tbody>
+            {Object.entries(boltResults).map(([index, bolt]) => (
+              <tr key={index}>
+                <td style={styles.boltTableTd}>{`Bolt ${index}`}</td>
+                <td style={styles.boltTableTd}>{minLeak}</td>
+                <td style={styles.boltTableTd}>{maxLeak}</td>
+                <td style={styles.boltTableTd}>{bolt.angle ?? "-"}</td>
+                <td style={styles.boltTableTd}>{bolt.leak ?? "-"}</td>
+                <td
+                  style={{
+                    ...styles.boltTableTd,
+                    color:
+                      bolt.status === "OK"
+                        ? "#00ff00"
+                        : bolt.status === "NOK"
+                          ? "#ff0033"
+                          : "#ffffff",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {bolt.status ?? "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   };
 
@@ -379,6 +479,7 @@ const LeakTool = () => {
   const formatTime = now.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: true,
   });
 
@@ -392,7 +493,7 @@ const LeakTool = () => {
       <div style={styles.header}>
         <img src="/Hero.svg" alt="Hero Logo" style={styles.heroLogo} />
         <div style={styles.headerPill}>
-          <div style={styles.headerTitle}>DC TOOL TIGHTENING</div>
+          <div style={styles.headerTitle}>LEAK STAGE TESTING</div>
         </div>
         <img
           src="/operatex.png"
@@ -430,6 +531,23 @@ const LeakTool = () => {
           </span>
         </div>
 
+        {finalStatus && (
+          <div
+            style={{
+              fontSize: 50,
+
+              textAlign: "center",
+              fontWeight: "900",
+              letterSpacing: 3,
+              color: finalStatus === "OK" ? "#00ff00" : "#ff0033",
+              textShadow:
+                finalStatus === "OK" ? "0 0 20px #00ff00" : "0 0 20px #ff0033",
+            }}
+          >
+            FINAL STATUS: {finalStatus === "OK" ? "PASS" : "FAIL"}
+          </div>
+        )}
+
         <div style={styles.lineStatusRight}>
           <span
             style={{
@@ -438,15 +556,6 @@ const LeakTool = () => {
             }}
           >
             AUTO
-          </span>
-          <span style={styles.lineSeparator}>|</span>
-          <span
-            style={{
-              ...styles.lineManual,
-              opacity: operationMode === "MANUAL" ? 1 : 0.3,
-            }}
-          >
-            MANUAL
           </span>
         </div>
       </div>
@@ -488,20 +597,20 @@ const LeakTool = () => {
           </div>
         </div>
 
-        {/* TORQUE LIMIT */}
-        <div style={styles.torqueLimits}>
-          <div style={styles.torqueBox}>
-            <div style={styles.torqueValue}>{minLeak}</div>
-            <div style={styles.torqueLabel}>
+        {/* LEAK LIMIT */}
+        <div style={styles.leakLimits}>
+          <div style={styles.leakBox}>
+            <div style={styles.leakValue}>{minLeak}</div>
+            <div style={styles.leakLabel}>
               MINIMUM
               <br />
               LEAK
             </div>
           </div>
-          <div style={styles.torqueDivider} />
-          <div style={styles.torqueBox}>
-            <div style={styles.torqueValue}>{maxLeak}</div>
-            <div style={styles.torqueLabel}>
+          <div style={styles.leakDivider} />
+          <div style={styles.leakBox}>
+            <div style={styles.leakValue}>{maxLeak}</div>
+            <div style={styles.leakLabel}>
               MAXIMUM
               <br />
               LEAK
@@ -518,7 +627,7 @@ const LeakTool = () => {
             onChange={(e) => {
               setVinInput(e.target.value);
               setShowResult(false);
-              setShowTorqueValue(false);
+              setShowLeakValue(false);
             }}
             onKeyDown={handleVinKeyDown}
           />
@@ -530,15 +639,42 @@ const LeakTool = () => {
               </div>
             </div>
 
-            <div style={styles.angleRow}>
+            {/* <div style={styles.angleRow}>
               ANGLE -{" "}
-              {showTorqueValue && (
+              {showLeakValue && (
                 <span style={styles.yellow}>{liveAngle}°</span>
               )}
-            </div>
+            </div> */}
           </div>
 
-          <TorqueResultSection />
+          {vinError ? (
+            <div
+              style={{
+                textAlign: "center",
+                marginTop: 80,
+                fontSize: 32,
+                color: "#ff0033",
+                fontWeight: "bold",
+                textShadow: "0 0 15px #ff0033",
+              }}
+            >
+              ❌ {vinError}
+            </div>
+          ) : vinLoaded ? (
+            <LeakResultSection />
+          ) : (
+            <div
+              style={{
+                textAlign: "center",
+                marginTop: 80,
+                fontSize: 28,
+                color: "#ffaa00",
+                fontWeight: "bold",
+              }}
+            >
+              ⚠ WAITING FOR VIN
+            </div>
+          )}
         </div>
       </div>
       {/* FOOTER */}
@@ -760,7 +896,7 @@ const styles = {
     fontWeight: "bold",
   },
 
-  torqueLimits: {
+  leakLimits: {
     width: 180,
     display: "flex",
     flexDirection: "column",
@@ -768,17 +904,17 @@ const styles = {
     justifyContent: "center",
   },
 
-  torqueBox: { textAlign: "center" },
+  leakBox: { textAlign: "center" },
 
-  torqueValue: {
+  leakValue: {
     fontSize: 60,
     color: "#ffd000",
     fontWeight: "bold",
   },
 
-  torqueLabel: { fontSize: 16 },
+  leakLabel: { fontSize: 16 },
 
-  torqueDivider: {
+  leakDivider: {
     height: 2,
     width: "80%",
     background: "#ff8000df",
@@ -816,14 +952,14 @@ const styles = {
     fontSize: 40,
   },
 
-  skuText: { color: "#fff" },
+  skuText: { color: "#fff", fontWeight: "bold" },
   yellow: { color: "#ffd000", fontWeight: "bold" },
 
   angleRow: {
     fontSize: 40,
   },
 
-  torqueDisplay: {
+  leakDisplay: {
     height: 150,
     width: 420,
     border: "10px solid #00ff00",
@@ -834,7 +970,7 @@ const styles = {
     padding: 10,
   },
 
-  torqueText: {
+  leakText: {
     color: "#ffd000",
     fontSize: 20,
     textAlign: "right",
@@ -862,7 +998,38 @@ const styles = {
   footerHighlight: {
     fontWeight: "bold",
   },
+
+  boltTableContainer: {
+    marginTop: 20,
+    backgroundColor: "#0b0f1a",
+    border: "3px solid #00c3ff",
+    borderRadius: 12,
+    padding: 20,
+    boxShadow: "0 0 20px rgba(0,195,255,0.4)",
+  },
+
+  boltTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    textAlign: "center",
+    fontSize: 20,
+    color: "#ffffff",
+  },
+
+  boltTableTh: {
+    border: "1px solid #00c3ff",
+    padding: "12px 8px",
+    fontWeight: "bold",
+    fontSize: 22,
+    backgroundColor: "#111827",
+    color: "#00c3ff",
+  },
+
+  boltTableTd: {
+    border: "1px solid #1f2937",
+    padding: "10px 8px",
+    fontSize: 18,
+  },
 };
 
-export default LeakTool;
-
+export default LeakTest;
