@@ -396,12 +396,18 @@ const filteredData = useMemo(() => {
         <select
           className="form-control"
           value={formData.part_id}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              part_id: e.target.value,
-            })
-          }
+         onChange={(e) => {
+  const selectedPart = parts.find(
+    (p) => p.part_id === e.target.value
+  );
+
+  setFormData({
+    ...formData,
+    part_id: e.target.value,
+    allow_duplicate:
+      selectedPart?.trace_type === "BATCH", // ✅ Batch → allow
+  });
+}}
         >
           <option value="">Select Part</option>
           {parts.map((p) => (
@@ -535,22 +541,7 @@ const filteredData = useMemo(() => {
       </div>
 
       {/* DUPLICATE */}
-      <div className="form-check mt-3">
-        <input
-          className="form-check-input"
-          type="checkbox"
-          checked={formData.allow_duplicate}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              allow_duplicate: e.target.checked,
-            })
-          }
-        />
-        <label className="form-check-label fw-semibold">
-          Allow Duplicate
-        </label>
-      </div>
+
 
       <div className="d-flex justify-content-end mt-3 gap-2">
         <button

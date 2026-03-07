@@ -2,12 +2,6 @@
   text-align: center;
 }
 
-body {
-  user-select: none;
-  -webkit-user-select: none; /* Safari */
-  -ms-user-select: none;     /* IE */
-}
-
 .App-logo {
   height: 40vmin;
   pointer-events: none;

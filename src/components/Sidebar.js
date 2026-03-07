@@ -324,7 +324,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               </NavLink>
             </li>
 
-            <li className="nav-item">
+            {/* <li className="nav-item">
               <NavLink
                 to="/limit-master"
                 className="nav-link"
@@ -333,7 +333,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <i className="bi bi-diagram-3"></i>
                 <span>Limit Master</span>
               </NavLink>
-            </li>
+            </li> */}
 
 
             <li className="nav-item">
@@ -346,7 +346,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <span>Barcode Rules Master</span>
               </NavLink>
             </li>
-            <li className="nav-item">
+            {/* <li className="nav-item">
               <NavLink
                 to="/device-master"
                 className="nav-link"
@@ -355,8 +355,8 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <i className="bi bi-diagram-3"></i>
                 <span> Device Master</span>
               </NavLink>
-            </li>
-            <li className="nav-item">
+            </li> */}
+            {/* <li className="nav-item">
               <NavLink
                 to="/stage-device-master"
                 className="nav-link"
@@ -365,7 +365,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <i className="bi bi-diagram-3"></i>
                 <span> Stage Device Master</span>
               </NavLink>
-            </li>
+            </li> */}
             <li className="nav-item">
               <NavLink
                 to="/mqtt-signal-master"
@@ -377,7 +377,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               </NavLink>
             </li>
 
-            <li className="nav-item">
+            {/* <li className="nav-item">
               <NavLink
                 to="/device-signal-master"
                 className="nav-link"
@@ -386,7 +386,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <i className="bi bi-diagram-3"></i>
                 <span> Device Signal Master</span>
               </NavLink>
-            </li>
+            </li> */}
 
             <li className="nav-item">
               <NavLink
@@ -398,7 +398,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <span> Route Step Requirement Master</span>
               </NavLink>
             </li>
-            <li className="nav-item">
+            {/* <li className="nav-item">
               <NavLink
                 to="/document-master"
                 className="nav-link"
@@ -407,8 +407,8 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <i className="bi bi-diagram-3"></i>
                 <span> Document Master</span>
               </NavLink>
-            </li>
-            <li className="nav-item">
+            </li> */}
+            {/* <li className="nav-item">
               <NavLink
                 to="/document-version-master"
                 className="nav-link"
@@ -417,8 +417,8 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <i className="bi bi-diagram-3"></i>
                 <span> Document Version Master</span>
               </NavLink>
-            </li>
-            <li className="nav-item">
+            </li> */}
+            {/* <li className="nav-item">
               <NavLink
                 to="/stage-doc-map"
                 className="nav-link"
@@ -427,7 +427,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <i className="bi bi-diagram-3"></i>
                 <span> Stage Document Map Master</span>
               </NavLink>
-            </li>
+            </li> */}
             
 
 

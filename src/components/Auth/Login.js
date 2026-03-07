@@ -21,40 +21,76 @@ const handleChange = (e) => {
   setFormData({ ...formData, [e.target.name]: e.target.value });
 };
 
+// const handleLogin = async (e) => {
+//   e.preventDefault();
+
+//   if (!formData.username || !formData.password) {
+//     alert("Please enter username and password");
+//     return;
+//   }
+
+//   try {
+//     setLoading(true);
+
+//     const res = await axios.post(
+//       `${API_BASE_URL}/api/usersmaster/login`, // 🔥 Make sure backend route matches
+//       {
+//         username: formData.username,
+//         password: formData.password,
+//       }
+//     );
+
+//     // ✅ Store token
+//     localStorage.setItem("token", res.data.token);
+//     localStorage.setItem("user", JSON.stringify(res.data.user));
+
+//     alert("Login successful");
+
+//     navigate("/"); // redirect after login
+
+//   } catch (error) {
+//     alert(error.response?.data?.message || "Login failed");
+//   } finally {
+//     setLoading(false);
+//   }
+// };
+
+
+
+
+
 const handleLogin = async (e) => {
   e.preventDefault();
 
   if (!formData.username || !formData.password) {
-    alert("Please enter username and password");
-    return;
+    return; // no alert
   }
 
   try {
     setLoading(true);
 
     const res = await axios.post(
-      `${API_BASE_URL}/api/usersmaster/login`, // 🔥 Make sure backend route matches
+      `${API_BASE_URL}/api/usersmaster/login`,
       {
         username: formData.username,
         password: formData.password,
       }
     );
 
-    // ✅ Store token
+    // ✅ Store authentication
     localStorage.setItem("token", res.data.token);
     localStorage.setItem("user", JSON.stringify(res.data.user));
+    localStorage.setItem("isAuthenticated", "true");
 
-    alert("Login successful");
-
-    navigate("/"); // redirect after login
+    // ✅ Redirect to dashboard
+    navigate("/");
 
   } catch (error) {
-    alert(error.response?.data?.message || "Login failed");
+    console.error("Login failed:", error);
   } finally {
     setLoading(false);
   }
 };
-
   return (
     <div className="vh-100 d-flex position-relative" style={{ overflow: "hidden" }}>
 

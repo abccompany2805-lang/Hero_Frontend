@@ -1,221 +1,215 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Trash2, RotateCcw } from "lucide-react";
 import axios from "axios";
-import { Plus, Pencil, Trash2, Eye, RotateCcw } from "lucide-react";
 import API_BASE_URL from "../../config";
 
-const MAP_API = `${API_BASE_URL}/api/stagedocumentmaps`;
-const ROUTE_STEP_API = `${API_BASE_URL}/api/routestepmaster`;
-const DOC_VERSION_API = `${API_BASE_URL}/api/documentversions`;
-const STAGE_API = `${API_BASE_URL}/api/stagemaster`;
+const DOC_API = `${API_BASE_URL}/api/stage-documents`;
+const UPLOAD_API = `${API_BASE_URL}/api/stage-documents/upload`;
+const MODEL_API = `${API_BASE_URL}/api/models`;
+const STAGE_API = `${API_BASE_URL}/api/stages`;
 
 const emptyForm = {
-  route_step_id: "",
-  document_version_id: "",
-  mandatory_ready: false,
-  mandatory_acknowledgement: false,
-  training_required: false,
+  model_id: "",
+  stage_id: "",
+  files: [],
 };
 
-const StageDocumentMapMaster = () => {
-  const [rows, setRows] = useState([]);
-  const [routeSteps, setRouteSteps] = useState([]);
-  const [docVersions, setDocVersions] = useState([]);
-  const [stages, setStages] = useState([]);
+const fetchDocuments = async () => {
+  const res = await axios.get(DOC_API);
+  return res.data.data;   // 👈 THIS IS THE FIX
+};
+
+const fetchModels = async () => {
+  const res = await axios.get(MODEL_API);
+  return res.data;
+};
+
+const fetchStages = async () => {
+  const res = await axios.get(STAGE_API);
+  return res.data;
+};
+
+const StageDocumentsMaster = () => {
+  const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState({
-    route_step_id: "",
+    model: "",
+    stage: "",
   });
 
   const [formData, setFormData] = useState(emptyForm);
-  const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [showView, setShowView] = useState(false);
-  const [viewData, setViewData] = useState(null);
 
-  // ================= LOAD =================
-  useEffect(() => {
-    fetchAll();
-  }, []);
+const { data, isLoading } = useQuery({
+  queryKey: ["stage-documents"],
+  queryFn: fetchDocuments,
+});
 
-  const fetchAll = async () => {
-    const [m, rs, dv, st] = await Promise.all([
-      axios.get(MAP_API),
-      axios.get(ROUTE_STEP_API),
-      axios.get(DOC_VERSION_API),
-      axios.get(STAGE_API),
-    ]);
+const documents = Array.isArray(data) ? data : [];
 
-    setRows(m.data);
-    setRouteSteps(rs.data);
-    setDocVersions(dv.data);
-    setStages(st.data);
-  };
+  const { data: models = [] } = useQuery({
+    queryKey: ["models"],
+    queryFn: fetchModels,
+  });
 
-  // ================= HELPERS =================
-  const getStageName = (stageId) =>
-    stages.find((s) => s.stage_id === stageId)?.stage_name || stageId;
+  const { data: stages = [] } = useQuery({
+    queryKey: ["stages"],
+    queryFn: fetchStages,
+  });
 
-  const getRouteStepLabel = (id) => {
-    const rs = routeSteps.find((r) => r.route_step_id === id);
-    if (!rs) return id;
-    return `${getStageName(rs.stage_id)} → Seq ${rs.sequence_no}`;
-  };
+  const uploadMutation = useMutation({
+    mutationFn: (formData) => {
+      const data = new FormData();
+      data.append("model_id", formData.model_id);
+      data.append("stage_id", formData.stage_id);
 
-  const getDocVersionLabel = (id) => {
-    const dv = docVersions.find((d) => d.document_version_id === id);
-    if (!dv) return id;
-    return `Doc ${dv.document_id} | ${dv.version_no}`;
-  };
+      formData.files.forEach((file) => {
+        data.append("documents", file);
+      });
 
-  // ================= FILTER =================
-  const filteredRows = useMemo(() => {
-    return rows.filter((r) =>
-      String(r.route_step_id).includes(filters.route_step_id)
+      return axios.post(UPLOAD_API, data, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["stage-documents"]);
+      setShowModal(false);
+      setFormData(emptyForm);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) =>
+      axios.delete(`${DOC_API}/${id}`),
+    onSuccess: () =>
+      queryClient.invalidateQueries(["stage-documents"]),
+  });
+
+  const filteredData = useMemo(() => {
+    return documents.filter((row) =>
+      Object.entries(filters).every(([key, val]) =>
+        val
+          ? String(row[key] || "")
+              .toLowerCase()
+              .includes(val.toLowerCase())
+          : true
+      )
     );
-  }, [rows, filters]);
+  }, [documents, filters]);
 
-  // ================= CRUD =================
-  const handleAdd = () => {
-    setIsEditing(false);
-    setFormData(emptyForm);
-    setShowModal(true);
-  };
+  const getModelSKU = (id) =>
+    models.find((m) => m.model_id === id)?.model_sku || id;
 
-  const handleEdit = (row) => {
-    setIsEditing(true);
-    setFormData({
-      stage_document_map_id: row.stage_document_map_id,
-      route_step_id: String(row.route_step_id),
-      document_version_id: String(row.document_version_id),
-      mandatory_ready: row.mandatory_ready,
-      mandatory_acknowledgement: row.mandatory_acknowledgement,
-      training_required: row.training_required,
-    });
-    setShowModal(true);
-  };
+  const getStageNumber = (id) =>
+    stages.find((s) => s.stage_id === id)?.stage_no || id;
 
-  const handleSave = async () => {
-    if (!formData.route_step_id || !formData.document_version_id) {
-      alert("Route Step and Document Version are required");
-      return;
-    }
-
-    const payload = {
-      route_step_id: Number(formData.route_step_id),
-      document_version_id: Number(formData.document_version_id),
-      mandatory_ready: formData.mandatory_ready,
-      mandatory_acknowledgement: formData.mandatory_acknowledgement,
-      training_required: formData.training_required,
-    };
-
-    if (isEditing) {
-      await axios.put(
-        `${MAP_API}/${formData.stage_document_map_id}`,
-        payload
-      );
-    } else {
-      await axios.post(MAP_API, payload);
-    }
-
-    setShowModal(false);
-    fetchAll();
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this mapping?")) {
-      await axios.delete(`${MAP_API}/${id}`);
-      fetchAll();
-    }
-  };
-
-  const handleView = (row) => {
-    setViewData(row);
-    setShowView(true);
-  };
-
-  // ================= UI =================
   return (
     <div className="container-fluid py-3">
 
-      {/* HEADER */}
+      {/* HEADER (MATCHES PART MASTER) */}
       <div
         className="card shadow-sm rounded-4 mb-2 mx-2"
-                   style={{
-        borderLeft: "5px solid #dc3545",
-        borderTop: 0,
-        borderRight: 0,
-        borderBottom: 0,
-      }}
+        style={{
+          borderLeft: "5px solid #dc3545",
+          borderTop: 0,
+          borderRight: 0,
+          borderBottom: 0,
+        }}
       >
-        <div className="card-body d-flex justify-content-between align-items-center">
-          <h4 className="fw-bold mb-0">Stage Document Mapping</h4>
+        <div className="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+          <h4 className="fw-bold mb-1">Stage Documents</h4>
 
-          <div className="d-flex gap-2">
+          <div className="d-flex gap-2 flex-wrap align-items-center">
             <input
               className="form-control"
-              placeholder="Route Step ID"
-              style={{ width: 160 }}
-              value={filters.route_step_id}
+              placeholder="Model SKU"
+              style={{ width: 150 }}
+              value={filters.model}
               onChange={(e) =>
-                setFilters({ route_step_id: e.target.value })
+                setFilters({ ...filters, model: e.target.value })
+              }
+            />
+
+            <input
+              className="form-control"
+              placeholder="Stage No"
+              style={{ width: 150 }}
+              value={filters.stage}
+              onChange={(e) =>
+                setFilters({ ...filters, stage: e.target.value })
               }
             />
 
             <button
               className="btn btn-sm"
               style={{ background: "#d3e7f3" }}
-              onClick={() => setFilters({ route_step_id: "" })}
+              onClick={() =>
+                setFilters({ model: "", stage: "" })
+              }
             >
               <RotateCcw size={14} />
             </button>
 
-            <button className="btn btn-danger btn-sm" onClick={handleAdd}>
-              <Plus size={14} /> Add Mapping
+            <button
+              className="btn btn-danger btn-sm d-flex align-items-center gap-1"
+              onClick={() => setShowModal(true)}
+            >
+              <Plus size={14} />
+              Upload
             </button>
           </div>
         </div>
       </div>
 
       {/* TABLE */}
-    <div className="table-responsive card shadow-sm border-0 rounded-4 my-4 mx-2">
+      <div className="table-responsive card shadow-sm border-0 rounded-4 my-4 mx-2">
         <table className="table table-bordered align-middle mb-0">
-          <thead className="border-bottom">
+          <thead>
             <tr className="text-muted">
               <th>Sr</th>
-              <th>Route Step</th>
-              <th>Document Version</th>
-              <th>Ready</th>
-              <th>Ack</th>
-              <th>Training</th>
+              <th>Model SKU</th>
+              <th>Stage No</th>
+              <th>Total Files</th>
+              <th>Created</th>
               <th className="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((r, i) => (
-              <tr key={r.stage_document_map_id}>
-                <td>{i + 1}</td>
-                <td>{getRouteStepLabel(r.route_step_id)}</td>
-                <td>{getDocVersionLabel(r.document_version_id)}</td>
-                <td>{r.mandatory_ready ? "Yes" : "No"}</td>
-                <td>{r.mandatory_acknowledgement ? "Yes" : "No"}</td>
-                <td>{r.training_required ? "Yes" : "No"}</td>
-                <td className="text-end">
-                  <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => handleView(r)}>
-                    <Eye size={14} />
-                  </button>
-                  <button className="btn btn-outline-primary btn-sm me-2" onClick={() => handleEdit(r)}>
-                    <Pencil size={14} />
-                  </button>
-                  <button className="btn btn-outline-danger btn-sm" onClick={() => handleDelete(r.stage_document_map_id)}>
-                    <Trash2 size={14} />
-                  </button>
+            {isLoading && (
+              <tr>
+                <td colSpan="6" className="text-center py-4">
+                  Loading...
                 </td>
               </tr>
-            ))}
+            )}
 
-            {filteredRows.length === 0 && (
+            {!isLoading &&
+              filteredData.map((row, i) => (
+                <tr key={row.id}>
+                  <td>{i + 1}</td>
+                  <td>{row.model_name}</td>
+                  <td>{getStageNumber(row.stage_id)}</td>
+                  <td>{row.documents?.length || 0}</td>
+                  <td>
+                    {new Date(row.created_at).toLocaleString()}
+                  </td>
+                  <td className="text-end">
+                    <button
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={() =>
+                        deleteMutation.mutate(row.id)
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+            {!isLoading && filteredData.length === 0 && (
               <tr>
-                <td colSpan="7" className="text-center text-muted py-4">
+                <td colSpan="6" className="text-center text-muted py-4">
                   No records found
                 </td>
               </tr>
@@ -224,102 +218,99 @@ const StageDocumentMapMaster = () => {
         </table>
       </div>
 
-      {/* ADD / EDIT MODAL */}
+      {/* MODAL (MATCH STYLE) */}
       {showModal && (
-        <div style={modalBackdrop}>
-          <div className="bg-white rounded-4 shadow p-4" style={{ width: 520 }}>
-            <h5 className="mb-3">
-              {isEditing ? "Edit Mapping" : "Add Mapping"}
-            </h5>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1050,
+          }}
+        >
+          <div
+            className="bg-white rounded-4 shadow p-4"
+            style={{ width: 450 }}
+          >
+            <h5 className="mb-3">Upload Stage Documents</h5>
 
             <div className="mb-2">
-              <label className="form-label">Route Step</label>
+              <label className="form-label">Model SKU</label>
               <select
-                className="form-select"
-                value={formData.route_step_id}
+                className="form-control"
+                value={formData.model_id}
                 onChange={(e) =>
-                  setFormData({ ...formData, route_step_id: e.target.value })
+                  setFormData({
+                    ...formData,
+                    model_id: e.target.value,
+                  })
                 }
               >
                 <option value="">Select</option>
-                {routeSteps.map((r) => (
-                  <option key={r.route_step_id} value={r.route_step_id}>
-                    {getRouteStepLabel(r.route_step_id)}
+             {models.map((m) => (
+  <option key={m.model_id} value={m.model_id}>
+    {m.model_code} - {m.model_name}
+  </option>
+))}
+              </select>
+            </div>
+
+            <div className="mb-2">
+              <label className="form-label">Stage No</label>
+              <select
+                className="form-control"
+                value={formData.stage_id}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    stage_id: e.target.value,
+                  })
+                }
+              >
+                <option value="">Select</option>
+                {stages.map((s) => (
+                  <option
+                    key={s.stage_id}
+                    value={s.stage_id}
+                  >
+                    {s.stage_no}
                   </option>
                 ))}
               </select>
             </div>
 
             <div className="mb-2">
-              <label className="form-label">Document Version</label>
-              <select
-                className="form-select"
-                value={formData.document_version_id}
+              <label className="form-label">Upload Files</label>
+              <input
+                type="file"
+                multiple
+                className="form-control"
                 onChange={(e) =>
-                  setFormData({ ...formData, document_version_id: e.target.value })
+                  setFormData({
+                    ...formData,
+                    files: Array.from(e.target.files),
+                  })
                 }
-              >
-                <option value="">Select</option>
-                {docVersions.map((d) => (
-                  <option key={d.document_version_id} value={d.document_version_id}>
-                    {getDocVersionLabel(d.document_version_id)}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
-            {[
-              ["mandatory_ready", "Mandatory Ready"],
-              ["mandatory_acknowledgement", "Mandatory Acknowledgement"],
-              ["training_required", "Training Required"],
-            ].map(([key, label]) => (
-              <div className="form-check mt-2" key={key}>
-                <input
-                  type="checkbox"
-                  className="form-check-input"
-                  checked={formData[key]}
-                  onChange={(e) =>
-                    setFormData({ ...formData, [key]: e.target.checked })
-                  }
-                />
-                <label className="form-check-label">{label}</label>
-              </div>
-            ))}
-
-            <div className="text-end mt-3">
-              <button className="btn btn-secondary me-2" onClick={() => setShowModal(false)}>
+            <div className="d-flex justify-content-end gap-2 mt-3">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowModal(false)}
+              >
                 Cancel
               </button>
-              <button className="btn btn-danger" onClick={handleSave}>
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW MODAL */}
-      {showView && viewData && (
-        <div style={modalBackdrop}>
-          <div className="bg-white rounded-4 shadow p-4" style={{ width: 480 }}>
-            <h5 className="mb-3">Mapping Details</h5>
-
-            {[
-              ["Route Step", getRouteStepLabel(viewData.route_step_id)],
-              ["Document Version", getDocVersionLabel(viewData.document_version_id)],
-              ["Mandatory Ready", viewData.mandatory_ready ? "Yes" : "No"],
-              ["Mandatory Acknowledgement", viewData.mandatory_acknowledgement ? "Yes" : "No"],
-              ["Training Required", viewData.training_required ? "Yes" : "No"],
-            ].map(([k, v]) => (
-              <div key={k} className="d-flex justify-content-between mb-1">
-                <strong className="text-muted">{k}</strong>
-                <span>{v}</span>
-              </div>
-            ))}
-
-            <div className="text-end mt-3">
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowView(false)}>
-                Close
+              <button
+                className="btn btn-danger"
+                onClick={() =>
+                  uploadMutation.mutate(formData)
+                }
+              >
+                Upload
               </button>
             </div>
           </div>
@@ -329,14 +320,4 @@ const StageDocumentMapMaster = () => {
   );
 };
 
-const modalBackdrop = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.6)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 1050,
-};
-
-export default StageDocumentMapMaster;
+export default StageDocumentsMaster;
