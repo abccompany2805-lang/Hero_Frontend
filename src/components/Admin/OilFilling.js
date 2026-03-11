@@ -46,6 +46,8 @@ const OilFilling = () => {
   const [oilResult, setOilResult] = useState(null);
   const [vinLoaded, setVinLoaded] = useState(false);
   const [passLocked, setPassLocked] = useState(false);
+  const [attempt, setAttempt] = useState(1);
+  const [oilAttempts, setOilAttempts] = useState([]);
 
   /* ================= OK / NOT OK LOGIC ================= */
   const isOilOk =
@@ -107,7 +109,8 @@ const OilFilling = () => {
     setFinalStatus(null);
     setOilResult(null);
     setLiveOil(0);
-  
+    setAttempt(1);
+
     setPrePitch(0);
     setPassLocked(false);
 
@@ -155,9 +158,154 @@ const OilFilling = () => {
     return baseStyle;
   };
 
+  // const insertProcessResult = async (resultValue) => {
+  //   try {
+  //     const recipeProcess = apiData.recipeProcess?.[0];
+
+  //     const payload = {
+  //       event_ts: new Date().toISOString(),
+  //       unit_id: apiData.unitData.unit_id,
+  //       route_step_id: apiData.routeStep.route_step_id,
+  //       tool_id: recipeProcess.tool_id,
+  //       program_no: recipeProcess.program_no,
+  //       result: resultValue,
+  //       lsl: recipeProcess.lsl,
+  //       usl: recipeProcess.usl,
+  //       vin_no: vinInput,
+  //       value_payload: {
+  //         oil_level_value: liveOil,
+  //         stage_no: stageNumber,
+  //         timestamp: new Date().toISOString(),
+  //       },
+  //     };
+
+  //     // 🔹 Get stored result_id (if any)
+  //     const storedResultId = localStorage.getItem(
+  //       `stage_${stageNumber}_result_id`,
+  //     );
+
+  //     let response;
+
+  //     if (storedResultId) {
+  //       // 🔥 UPDATE (Rework case)
+  //       response = await fetch(
+  //         `${API_BASE_URL}/api/process-results/${storedResultId}`,
+  //         {
+  //           method: "PUT",
+  //           headers: { "Content-Type": "application/json" },
+  //           body: JSON.stringify({
+  //             result: resultValue,
+  //             value_payload: payload.value_payload,
+  //           }),
+  //         },
+  //       );
+  //     } else {
+  //       // 🔥 FIRST INSERT
+  //       response = await fetch(`${API_BASE_URL}/api/process-results`, {
+  //         method: "POST",
+  //         headers: { "Content-Type": "application/json" },
+  //         body: JSON.stringify(payload),
+  //       });
+  //     }
+
+  //     const data = await response.json();
+
+  //     // 🔴 If first time NOK → store result_id
+  //     if (!storedResultId && resultValue === "NOK") {
+  //       localStorage.setItem(`stage_${stageNumber}_result_id`, data.result_id);
+  //     }
+  //   } catch (err) {
+  //     console.error("Process Result Error:", err);
+  //   }
+  // };
+
+  //   const insertProcessResult = async (resultValue) => {
+  //   try {
+
+  //     if (!apiData) return;
+
+  //     const recipeProcess = apiData.recipeProcess?.[0];
+
+  //     if (!recipeProcess) {
+  //       console.error("Recipe process data missing");
+  //       return;
+  //     }
+
+  //     const payload = {
+  //       event_ts: new Date().toISOString(),
+  //       unit_id: apiData.unitData?.unit_id,
+  //       route_step_id: apiData.routeStep?.route_step_id,
+  //       tool_id: recipeProcess.tool_id,
+  //       program_no: recipeProcess.program_no,
+  //       result: resultValue,
+  //       lsl: recipeProcess.lsl,
+  //       usl: recipeProcess.usl,
+  //       vin_no: vinInput,
+
+  //       value_payload: {
+  //         oil_level_value: liveOil,
+  //         stage_no: stageNumber,
+  //         timestamp: new Date().toISOString(),
+  //       },
+  //     };
+
+  //     const storageKey = `stage_${stageNumber}_result_id`;
+  //     const storedResultId = localStorage.getItem(storageKey);
+
+  //     let response;
+
+  //     /* ================= UPDATE (REWORK) ================= */
+
+  //     if (storedResultId) {
+
+  //       response = await fetch(
+  //         `${API_BASE_URL}/api/process-results/${storedResultId}`,
+  //         {
+  //           method: "PUT",
+  //           headers: { "Content-Type": "application/json" },
+  //           body: JSON.stringify({
+  //             result: resultValue,
+  //             value_payload: payload.value_payload,
+  //           }),
+  //         }
+  //       );
+
+  //     }
+
+  //     /* ================= FIRST INSERT ================= */
+
+  //     else {
+
+  //       response = await fetch(
+  //         `${API_BASE_URL}/api/process-results`,
+  //         {
+  //           method: "POST",
+  //           headers: { "Content-Type": "application/json" },
+  //           body: JSON.stringify(payload),
+  //         }
+  //       );
+
+  //     }
+
+  //     const data = await response.json();
+
+  //     /* ================= STORE RESULT ID ================= */
+
+  //     if (!storedResultId && data?.result_id) {
+  //       localStorage.setItem(storageKey, data.result_id);
+  //     }
+
+  //   } catch (err) {
+  //     console.error("Process Result Error:", err);
+  //   }
+  // };
+
   const insertProcessResult = async (resultValue) => {
     try {
+      if (!apiData) return;
+
       const recipeProcess = apiData.recipeProcess?.[0];
+      if (!recipeProcess) return;
 
       const payload = {
         event_ts: new Date().toISOString(),
@@ -169,35 +317,32 @@ const OilFilling = () => {
         lsl: recipeProcess.lsl,
         usl: recipeProcess.usl,
         vin_no: vinInput,
+        line_status: lineStatus,
+
         value_payload: {
-  oil_level_value: liveOil,
-  stage_no: stageNumber,
-  timestamp: new Date().toISOString(),
-}
+          oil_level_value: liveOil,
+          stage_no: stageNumber,
+          timestamp: new Date().toISOString(),
+        },
       };
 
-      // 🔹 Get stored result_id (if any)
-      const storedResultId = localStorage.getItem(
-        `stage_${stageNumber}_result_id`,
-      );
+      console.log("Sending Payload:", payload);
+
+      const storageKey = `stage_${stageNumber}_result_id`;
+      const storedResultId = localStorage.getItem(storageKey);
 
       let response;
 
       if (storedResultId) {
-        // 🔥 UPDATE (Rework case)
         response = await fetch(
           `${API_BASE_URL}/api/process-results/${storedResultId}`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              result: resultValue,
-              value_payload: payload.value_payload,
-            }),
+            body: JSON.stringify(payload),
           },
         );
       } else {
-        // 🔥 FIRST INSERT
         response = await fetch(`${API_BASE_URL}/api/process-results`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -205,11 +350,17 @@ const OilFilling = () => {
         });
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("API ERROR:", text);
+        return;
+      }
 
-      // 🔴 If first time NOK → store result_id
-      if (!storedResultId && resultValue === "NOK") {
-        localStorage.setItem(`stage_${stageNumber}_result_id`, data.result_id);
+      const data = await response.json();
+      console.log("API Response:", data);
+
+      if (!storedResultId && data?.result_id) {
+        localStorage.setItem(storageKey, data.result_id);
       }
     } catch (err) {
       console.error("Process Result Error:", err);
@@ -224,7 +375,7 @@ const OilFilling = () => {
       mqttClientRef.current.end(true);
     }
 
-    const client = mqtt.connect("ws://192.168.1.2:9001", {
+    const client = mqtt.connect("ws://192.168.29.14:9001", {
       username: "mqttuser",
       password: "Theta@123",
       reconnectPeriod: 3000,
@@ -264,26 +415,23 @@ const OilFilling = () => {
       }
 
       if (topic === oilLevelTopic) {
+        if (!vinLoaded || passLocked) return;
 
-  if (!vinLoaded || passLocked) return;
+        const value = Number(payload);
 
-  const value = Number(payload);
+        if (!isNaN(value)) {
+          setLiveOil(value);
 
-  if (!isNaN(value)) {
+          const min = Number(minOil);
+          const max = Number(maxOil);
 
-    setLiveOil(value);
-
-    const min = Number(minOil);
-    const max = Number(maxOil);
-
-    if (value >= min && value <= max) {
-      setOilResult("OK");
-    } else {
-      setOilResult("NOK");
-    }
-  }
-}
-
+          if (value >= min && value <= max) {
+            setOilResult("OK");
+          } else {
+            setOilResult("NOK");
+          }
+        }
+      }
 
       if (topic === prePitchTopic) {
         const value = Number(payload);
@@ -327,39 +475,33 @@ const OilFilling = () => {
   /* ================= PASS / FAIL LOGIC ================= */
 
   useEffect(() => {
+    if (!vinLoaded) return;
+    if (!oilResult) return;
 
-  if (!vinLoaded) return;
-  if (!oilResult) return;
+    let final = null;
 
-  let final = null;
-
-  if (oilResult === "OK") {
-    final = "OK";
-  }
-  else if (oilResult === "NOK" && prePitch === 1) {
-    final = "NOK";
-  }
-
-  if (!final) return;
-
-  if (final !== lastSentStatusRef.current) {
-
-    mqttClientRef.current?.publish(
-      resultTopic,
-      final === "OK" ? "1" : "0"
-    );
-
-    insertProcessResult(final);
-    setFinalStatus(final);
-
-    if (final === "OK") {
-      setPassLocked(true);
+    if (oilResult === "OK") {
+      final = "OK";
+    } else if (oilResult === "NOK" && prePitch === 1) {
+      final = "NOK";
     }
 
-    lastSentStatusRef.current = final;
-  }
+    if (!final) return;
 
-}, [oilResult, prePitch]);
+    if (final !== lastSentStatusRef.current) {
+      mqttClientRef.current?.publish(resultTopic, final === "OK" ? "1" : "0");
+
+      insertProcessResult(final);
+      setFinalStatus(final);
+
+      if (final === "OK") {
+        setPassLocked(true);
+      }
+
+      lastSentStatusRef.current = final;
+    }
+  }, [oilResult, prePitch, vinLoaded]);
+
   /* ================= FETCH MODEL DATA ================= */
 
   const fetchModelData = async (vin_no, stage_no) => {
@@ -398,7 +540,7 @@ const OilFilling = () => {
 
       const recipeProcess = json.recipeProcess?.[0];
       setOilResult(null);
-setLiveOil(0);
+      setLiveOil(0);
 
       setModelName(json.model?.model_name ?? "-");
       setModelSku(json.model?.model_code ?? "-");
@@ -429,29 +571,29 @@ setLiveOil(0);
           </thead>
 
           <tbody>
-<tr>
-<td style={styles.boltTableTd}>Oil_Level_Value</td>
-<td style={styles.boltTableTd}>{minOil}</td>
-<td style={styles.boltTableTd}>{maxOil}</td>
+            <tr>
+              <td style={styles.boltTableTd}>Oil_Level_Value</td>
+              <td style={styles.boltTableTd}>{minOil}</td>
+              <td style={styles.boltTableTd}>{maxOil}</td>
 
-<td style={styles.boltTableTd}>{liveOil ?? "-"}</td>
+              <td style={styles.boltTableTd}>{liveOil ?? "-"}</td>
 
-<td
-style={{
-...styles.boltTableTd,
-color:
-oilResult === "OK"
-? "#00ff00"
-: oilResult === "NOK"
-? "#ff0033"
-: "#ffffff",
-fontWeight: "bold",
-}}
->
-{oilResult ?? "-"}
-</td>
-</tr>
-</tbody>
+              <td
+                style={{
+                  ...styles.boltTableTd,
+                  color:
+                    oilResult === "OK"
+                      ? "#00ff00"
+                      : oilResult === "NOK"
+                        ? "#ff0033"
+                        : "#ffffff",
+                  fontWeight: "bold",
+                }}
+              >
+                {oilResult ?? "-"}
+              </td>
+            </tr>
+          </tbody>
         </table>
       </div>
     );
